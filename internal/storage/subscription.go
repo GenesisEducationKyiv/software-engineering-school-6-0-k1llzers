@@ -11,11 +11,15 @@ import (
 )
 
 type SubscriptionStore struct {
-	db *sql.DB
+	executor executor
 }
 
 func NewSubscriptionStore(db *sql.DB) *SubscriptionStore {
-	return &SubscriptionStore{db}
+	return &SubscriptionStore{executor: db}
+}
+
+func (s *SubscriptionStore) WithTx(tx *sql.Tx) *SubscriptionStore {
+	return &SubscriptionStore{executor: tx}
 }
 
 func (s *SubscriptionStore) Create(ctx context.Context, userId int64, trackedRepositoryId int64) (domain.Subscription, error) {
@@ -27,7 +31,7 @@ func (s *SubscriptionStore) Create(ctx context.Context, userId int64, trackedRep
 
 	var created domain.Subscription
 
-	err := s.db.QueryRowContext(ctx, query, userId, trackedRepositoryId).Scan(
+	err := s.executor.QueryRowContext(ctx, query, userId, trackedRepositoryId).Scan(
 		&created.ID,
 		&created.UserID,
 		&created.TrackedRepositoryID,

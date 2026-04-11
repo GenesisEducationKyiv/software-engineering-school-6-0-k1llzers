@@ -57,7 +57,7 @@ func (s *TrackedRepositoryStore) GetByFullName(ctx context.Context, fullName str
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.TrackedRepository{}, domain.ErrTrackedRepositoryNotFound
+			return domain.TrackedRepository{}, domain.ErrNotFound
 		}
 
 		return domain.TrackedRepository{}, err
@@ -85,7 +85,7 @@ func (s *TrackedRepositoryStore) UpdateLastSeenTag(ctx context.Context, id int64
 	}
 
 	if rowsAffected == 0 {
-		return domain.ErrTrackedRepositoryNotFound
+		return domain.ErrNotFound
 	}
 
 	return nil

@@ -14,10 +14,9 @@ import (
 )
 
 type userCreatorStub struct {
-	user         domain.User
-	err          error
-	email        string
-	withTxCalled bool
+	user  domain.User
+	err   error
+	email string
 }
 
 func (s *userCreatorStub) CreateIfNotExists(_ context.Context, _ *sql.Tx, email string) (domain.User, error) {
@@ -30,14 +29,13 @@ func (s *userCreatorStub) CreateIfNotExists(_ context.Context, _ *sql.Tx, email 
 }
 
 type trackedRepositoryProviderStub struct {
-	result       domain.TrackedRepository
-	err          error
-	owner        string
-	repoName     string
-	lastSeenTag  string
-	updatedID    int64
-	updatedTag   string
-	withTxCalled bool
+	result      domain.TrackedRepository
+	err         error
+	owner       string
+	repoName    string
+	lastSeenTag string
+	updatedID   int64
+	updatedTag  string
 }
 
 func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, _ *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
@@ -91,7 +89,6 @@ type subscriptionCreatorStub struct {
 	confirmedToken      string
 	cancellationToken   string
 	listEmail           string
-	withTxCalled        bool
 }
 
 func (s *subscriptionCreatorStub) Create(_ context.Context, _ *sql.Tx, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {

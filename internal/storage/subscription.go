@@ -52,9 +52,10 @@ func (s *SubscriptionStore) Create(ctx context.Context, tx *sql.Tx, userID int64
 
 func (s *SubscriptionStore) SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error {
 	query := `
-		update subscriptions 
-			set confirmed=true 
-		where confirmation_token=$1 and confirmed=false;
+		update subscriptions
+		set confirmed = true,
+			updated_at = now()
+		where confirmation_token = $1 and confirmed = false;
 	`
 
 	result, err := s.db.ExecContext(ctx, query, confirmationToken)
@@ -68,6 +69,14 @@ func (s *SubscriptionStore) SetConfirmedByTokenAndConfirmedNotTrue(ctx context.C
 	}
 
 	if rowsAffected == 0 {
+		var exists bool
+		if err := s.db.QueryRowContext(ctx, `select exists(select 1 from subscriptions where confirmation_token = $1)`, confirmationToken).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			return domain.ErrInvalidToken
+		}
+
 		return domain.ErrNotFound
 	}
 

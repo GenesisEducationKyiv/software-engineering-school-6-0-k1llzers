@@ -23,6 +23,7 @@ type Client struct {
 type latestReleaseResponse struct {
 	TagName     string    `json:"tag_name"`
 	Name        string    `json:"name"`
+	HTMLURL     string    `json:"html_url"`
 	Draft       bool      `json:"draft"`
 	Prerelease  bool      `json:"prerelease"`
 	PublishedAt time.Time `json:"published_at"`
@@ -45,27 +46,38 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client, token string)
 	}
 }
 
-func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error) {
-	endpoint := fmt.Sprintf("%s/repos/%s/%s/releases/latest", c.baseURL, owner, repoName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+func (c *Client) RepositoryExists(ctx context.Context, owner string, repoName string) error {
+	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/%s", c.baseURL, owner, repoName))
 	if err != nil {
-		return domain.Release{}, err
+		return err
 	}
+	defer resp.Body.Close()
 
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusNotFound:
+		return domain.ErrNotFound
+	case http.StatusTooManyRequests, http.StatusForbidden:
+		return domain.ErrRateLimited
+	default:
+		return fmt.Errorf("github repository request failed: status %d", resp.StatusCode)
 	}
+}
 
-	resp, err := c.httpClient.Do(req)
+func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/%s/releases/latest", c.baseURL, owner, repoName))
 	if err != nil {
 		return domain.Release{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return domain.Release{}, domain.ErrNotFound
+		return domain.Release{}, domain.ErrNoReleases
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
+		return domain.Release{}, domain.ErrRateLimited
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -80,8 +92,25 @@ func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName st
 	return domain.Release{
 		TagName:     payload.TagName,
 		Name:        payload.Name,
+		HTMLURL:     payload.HTMLURL,
 		Draft:       payload.Draft,
 		Prerelease:  payload.Prerelease,
 		PublishedAt: payload.PublishedAt,
 	}, nil
+}
+
+func (c *Client) doRequest(ctx context.Context, method string, endpoint string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+	req.Header.Set("User-Agent", c.userAgent)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	return c.httpClient.Do(req)
 }

@@ -49,7 +49,8 @@ func Default() Config {
 			Token: "",
 		},
 		Mail: MailConfig{
-			Port: 587,
+			Port:       587,
+			ApiBaseUrl: "http://localhost:8080/api",
 		},
 	}
 }

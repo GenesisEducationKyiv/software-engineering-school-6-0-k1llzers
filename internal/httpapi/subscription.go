@@ -56,6 +56,8 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		case errors.Is(err, domain.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, domain.ErrRateLimited):
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		}
@@ -105,6 +107,8 @@ func (h *SubscriptionHandler) Confirm(c *gin.Context) {
 
 	if err := h.subscriptions.ConfirmSubscription(c.Request.Context(), token); err != nil {
 		switch {
+		case errors.Is(err, domain.ErrInvalidToken):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, domain.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		default:

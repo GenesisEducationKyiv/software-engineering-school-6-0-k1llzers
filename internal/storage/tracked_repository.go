@@ -15,7 +15,7 @@ func NewTrackedRepositoryStore(db *sql.DB) *TrackedRepositoryStore {
 	return &TrackedRepositoryStore{db: db}
 }
 
-func (s *TrackedRepositoryStore) CreatIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
 	query := `
 		insert into tracked_repositories (owner, name, last_seen_tag)
 		values ($1, $2, $3)

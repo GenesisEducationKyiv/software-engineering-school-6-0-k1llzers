@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/mail"
 	"github-release-notifier/internal/readmodel"
 )
@@ -18,7 +19,7 @@ type ReleaseMonitor struct {
 	txManager     txManager
 	repositories  TrackedRepositoryStore
 	subscriptions SubscriptionStore
-	releaseClient githubReleaseClient
+	repositoryAPI githubRepositoryClient
 	mailQueue     mail.Queue
 }
 
@@ -26,14 +27,14 @@ func NewReleaseMonitor(
 	txManager txManager,
 	repositories TrackedRepositoryStore,
 	subscriptions SubscriptionStore,
-	releaseClient githubReleaseClient,
+	repositoryAPI githubRepositoryClient,
 	mailQueue mail.Queue,
 ) *ReleaseMonitor {
 	return &ReleaseMonitor{
 		txManager:     txManager,
 		repositories:  repositories,
 		subscriptions: subscriptions,
-		releaseClient: releaseClient,
+		repositoryAPI: repositoryAPI,
 		mailQueue:     mailQueue,
 	}
 }
@@ -65,8 +66,12 @@ func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
 	var checkErrors []error
 
 	for _, group := range groupedSubscriptions {
-		release, err := m.releaseClient.GetLatestRelease(ctx, group.owner, group.name)
+		release, err := m.repositoryAPI.GetLatestRelease(ctx, group.owner, group.name)
 		if err != nil {
+			if errors.Is(err, domain.ErrNoReleases) {
+				continue
+			}
+
 			checkErrors = append(checkErrors, fmt.Errorf("%s/%s: %w", group.owner, group.name, err))
 			continue
 		}

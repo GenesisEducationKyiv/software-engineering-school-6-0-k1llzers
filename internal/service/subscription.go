@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 
 	"github-release-notifier/internal/domain"
@@ -19,7 +20,7 @@ type UserStore interface {
 }
 
 type TrackedRepositoryStore interface {
-	CreatIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
+	CreateIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
 	UpdateLastSeenTag(ctx context.Context, tx *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error
 }
 
@@ -31,7 +32,8 @@ type SubscriptionStore interface {
 	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error)
 }
 
-type githubReleaseClient interface {
+type githubRepositoryClient interface {
+	RepositoryExists(ctx context.Context, owner string, repoName string) error
 	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
@@ -40,7 +42,7 @@ type SubscriptionService struct {
 	users         UserStore
 	repositories  TrackedRepositoryStore
 	subscriptions SubscriptionStore
-	releaseClient githubReleaseClient
+	repositoryAPI githubRepositoryClient
 	mailQueue     mail.Queue
 }
 
@@ -49,7 +51,7 @@ func NewSubscriptionService(
 	users UserStore,
 	repositories TrackedRepositoryStore,
 	subscriptions SubscriptionStore,
-	releaseClient githubReleaseClient,
+	repositoryAPI githubRepositoryClient,
 	mailQueue mail.Queue,
 ) *SubscriptionService {
 	return &SubscriptionService{
@@ -57,7 +59,7 @@ func NewSubscriptionService(
 		users:         users,
 		repositories:  repositories,
 		subscriptions: subscriptions,
-		releaseClient: releaseClient,
+		repositoryAPI: repositoryAPI,
 		mailQueue:     mailQueue,
 	}
 }
@@ -68,9 +70,18 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 		return err
 	}
 
-	release, err := s.releaseClient.GetLatestRelease(ctx, owner, repoName)
-	if err != nil {
+	if err := s.repositoryAPI.RepositoryExists(ctx, owner, repoName); err != nil {
 		return err
+	}
+
+	release, err := s.repositoryAPI.GetLatestRelease(ctx, owner, repoName)
+	if err != nil && !errors.Is(err, domain.ErrNoReleases) {
+		return err
+	}
+
+	lastSeenTag := ""
+	if err == nil {
+		lastSeenTag = release.TagName
 	}
 
 	return s.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
@@ -79,7 +90,7 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 			return err
 		}
 
-		repository, err := s.repositories.CreatIfNotExists(ctx, tx, owner, repoName, release.TagName)
+		repository, err := s.repositories.CreateIfNotExists(ctx, tx, owner, repoName, lastSeenTag)
 		if err != nil {
 			return err
 		}

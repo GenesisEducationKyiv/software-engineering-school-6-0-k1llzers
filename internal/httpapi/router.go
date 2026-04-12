@@ -7,6 +7,7 @@ func NewRouter(subscriptionHandler *SubscriptionHandler) *gin.Engine {
 	router.Use(gin.Recovery())
 
 	router.POST("/subscribe", subscriptionHandler.Create)
+	router.GET("/subscriptions", subscriptionHandler.List)
 	router.GET("/confirm/:token", subscriptionHandler.Confirm)
 	router.GET("/unsubscribe/:token", subscriptionHandler.Cancel)
 

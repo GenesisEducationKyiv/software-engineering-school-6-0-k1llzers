@@ -99,3 +99,45 @@ func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cance
 
 	return nil
 }
+
+func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]domain.SubscriptionView, error) {
+	query := `
+		select
+			u.email,
+			tr.owner || '/' || tr.name as repo,
+			s.confirmed,
+			coalesce(tr.last_seen_tag, '')
+		from subscriptions s
+		join users u on u.id = s.user_id
+		join tracked_repositories tr on tr.id = s.tracked_repository_id
+		where u.email = $1
+		order by tr.owner, tr.name;
+	`
+
+	rows, err := s.executor.QueryContext(ctx, query, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subscriptions []domain.SubscriptionView
+	for rows.Next() {
+		var item domain.SubscriptionView
+		if err := rows.Scan(
+			&item.Email,
+			&item.Repo,
+			&item.Confirmed,
+			&item.LastSeenTag,
+		); err != nil {
+			return nil, err
+		}
+
+		subscriptions = append(subscriptions, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return subscriptions, nil
+}

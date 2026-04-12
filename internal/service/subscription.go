@@ -28,6 +28,7 @@ type subscriptionCreator interface {
 	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
+	ListByEmail(ctx context.Context, email string) ([]domain.SubscriptionView, error)
 	WithTx(tx *sql.Tx) subscriptionCreator
 }
 
@@ -118,6 +119,10 @@ func (s *SubscriptionService) ConfirmSubscription(ctx context.Context, token str
 
 func (s *SubscriptionService) CancelSubscription(ctx context.Context, token string) error {
 	return s.subscriptions.DeleteByCancellationToken(ctx, token)
+}
+
+func (s *SubscriptionService) ListSubscriptions(ctx context.Context, email string) ([]domain.SubscriptionView, error) {
+	return s.subscriptions.ListByEmail(ctx, email)
 }
 
 func splitRepositoryFullName(repositoryFullName string) (string, string, error) {

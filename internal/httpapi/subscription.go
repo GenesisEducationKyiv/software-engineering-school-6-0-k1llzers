@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/mail"
 
 	"github-release-notifier/internal/domain"
 
@@ -15,6 +16,7 @@ type subscriptionService interface {
 	Subscribe(ctx context.Context, email string, repositoryFullName string) error
 	ConfirmSubscription(ctx context.Context, token string) error
 	CancelSubscription(ctx context.Context, token string) error
+	ListSubscriptions(ctx context.Context, email string) ([]domain.SubscriptionView, error)
 }
 
 type SubscriptionHandler struct {
@@ -24,6 +26,13 @@ type SubscriptionHandler struct {
 type createSubscriptionRequest struct {
 	Email              string `json:"email" binding:"required,email"`
 	RepositoryFullName string `json:"repo" binding:"required"`
+}
+
+type listSubscriptionsResponse struct {
+	Email       string `json:"email"`
+	Repo        string `json:"repo"`
+	Confirmed   bool   `json:"confirmed"`
+	LastSeenTag string `json:"last_seen_tag"`
 }
 
 func NewSubscriptionHandler(subscriptions subscriptionService) *SubscriptionHandler {
@@ -53,6 +62,37 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func (h *SubscriptionHandler) List(c *gin.Context) {
+	email := c.Query("email")
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		return
+	}
+
+	if _, err := mail.ParseAddress(email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email"})
+		return
+	}
+
+	subscriptions, err := h.subscriptions.ListSubscriptions(c.Request.Context(), email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	response := make([]listSubscriptionsResponse, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		response = append(response, listSubscriptionsResponse{
+			Email:       subscription.Email,
+			Repo:        subscription.Repo,
+			Confirmed:   subscription.Confirmed,
+			LastSeenTag: subscription.LastSeenTag,
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *SubscriptionHandler) Confirm(c *gin.Context) {

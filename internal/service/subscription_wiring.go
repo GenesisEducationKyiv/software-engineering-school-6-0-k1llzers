@@ -50,6 +50,10 @@ func (a subscriptionStoreAdapter) DeleteByCancellationToken(ctx context.Context,
 	return a.store.DeleteByCancellationToken(ctx, cancellationToken)
 }
 
+func (a subscriptionStoreAdapter) ListByEmail(ctx context.Context, email string) ([]domain.SubscriptionView, error) {
+	return a.store.ListByEmail(ctx, email)
+}
+
 func (a subscriptionStoreAdapter) WithTx(tx *sql.Tx) subscriptionCreator {
 	return subscriptionStoreAdapter{store: a.store.WithTx(tx)}
 }

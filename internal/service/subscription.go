@@ -15,16 +15,16 @@ type txManager interface {
 }
 
 type UserStore interface {
-	CreateIfNotExists(ctx context.Context, email string) (domain.User, error)
+	CreateIfNotExists(ctx context.Context, tx *sql.Tx, email string) (domain.User, error)
 }
 
 type TrackedRepositoryStore interface {
-	CreatIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
-	UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error
+	CreatIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
+	UpdateLastSeenTag(ctx context.Context, tx *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error
 }
 
 type SubscriptionStore interface {
-	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
+	Create(ctx context.Context, tx *sql.Tx, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
 	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
@@ -35,37 +35,30 @@ type githubReleaseClient interface {
 	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
-type TxUserStoreFactory func(tx *sql.Tx) UserStore
-type TxTrackedRepositoryStoreFactory func(tx *sql.Tx) TrackedRepositoryStore
-type TxSubscriptionStoreFactory func(tx *sql.Tx) SubscriptionStore
-
 type SubscriptionService struct {
-	txManager              txManager
-	usersWithTx            TxUserStoreFactory
-	repositoriesWithTx     TxTrackedRepositoryStoreFactory
-	subscriptions          SubscriptionStore
-	subscriptionsWithTx    TxSubscriptionStoreFactory
-	releaseClient          githubReleaseClient
-	transactionalMailQueue mail.QueueFactory
+	txManager     txManager
+	users         UserStore
+	repositories  TrackedRepositoryStore
+	subscriptions SubscriptionStore
+	releaseClient githubReleaseClient
+	mailQueue     mail.Queue
 }
 
 func NewSubscriptionService(
 	txManager txManager,
-	usersWithTx TxUserStoreFactory,
-	repositoriesWithTx TxTrackedRepositoryStoreFactory,
+	users UserStore,
+	repositories TrackedRepositoryStore,
 	subscriptions SubscriptionStore,
-	subscriptionsWithTx TxSubscriptionStoreFactory,
 	releaseClient githubReleaseClient,
-	transactionalMailQueue mail.QueueFactory,
+	mailQueue mail.Queue,
 ) *SubscriptionService {
 	return &SubscriptionService{
-		txManager:              txManager,
-		usersWithTx:            usersWithTx,
-		repositoriesWithTx:     repositoriesWithTx,
-		subscriptions:          subscriptions,
-		subscriptionsWithTx:    subscriptionsWithTx,
-		releaseClient:          releaseClient,
-		transactionalMailQueue: transactionalMailQueue,
+		txManager:     txManager,
+		users:         users,
+		repositories:  repositories,
+		subscriptions: subscriptions,
+		releaseClient: releaseClient,
+		mailQueue:     mailQueue,
 	}
 }
 
@@ -81,27 +74,22 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 	}
 
 	return s.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
-		users := s.usersWithTx(tx)
-		repositories := s.repositoriesWithTx(tx)
-		subscriptions := s.subscriptionsWithTx(tx)
-		notifications := s.transactionalMailQueue.WithTx(tx)
-
-		user, err := users.CreateIfNotExists(ctx, email)
+		user, err := s.users.CreateIfNotExists(ctx, tx, email)
 		if err != nil {
 			return err
 		}
 
-		repository, err := repositories.CreatIfNotExists(ctx, owner, repoName, release.TagName)
+		repository, err := s.repositories.CreatIfNotExists(ctx, tx, owner, repoName, release.TagName)
 		if err != nil {
 			return err
 		}
 
-		subscription, err := subscriptions.Create(ctx, user.ID, repository.ID)
+		subscription, err := s.subscriptions.Create(ctx, tx, user.ID, repository.ID)
 		if err != nil {
 			return err
 		}
 
-		return notifications.QueueSubscriptionConfirmation(ctx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken)
+		return s.mailQueue.QueueSubscriptionConfirmation(ctx, tx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken)
 	})
 }
 

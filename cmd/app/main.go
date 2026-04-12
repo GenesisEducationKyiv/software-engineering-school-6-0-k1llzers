@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
 
 	"github-release-notifier/internal/config"
@@ -48,16 +47,15 @@ func main() {
 
 	subscriptionService := service.NewSubscriptionService(
 		transactionManager,
-		func(tx *sql.Tx) service.UserStore { return userStore.WithTx(tx) },
-		func(tx *sql.Tx) service.TrackedRepositoryStore { return trackedRepositoryStore.WithTx(tx) },
+		userStore,
+		trackedRepositoryStore,
 		subscriptionStore,
-		func(tx *sql.Tx) service.SubscriptionStore { return subscriptionStore.WithTx(tx) },
 		githubClient,
 		mailService,
 	)
 	releaseMonitor := service.NewReleaseMonitor(
 		transactionManager,
-		func(tx *sql.Tx) service.TrackedRepositoryStore { return trackedRepositoryStore.WithTx(tx) },
+		trackedRepositoryStore,
 		subscriptionStore,
 		githubClient,
 		mailService,

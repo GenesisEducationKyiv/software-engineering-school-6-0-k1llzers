@@ -11,28 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type SubscriptionRepository interface {
-	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
-	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
-	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
-	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
-	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error)
-	WithTx(tx *sql.Tx) *SubscriptionStore
-}
-
 type SubscriptionStore struct {
-	executor executor
+	db *sql.DB
 }
 
 func NewSubscriptionStore(db *sql.DB) *SubscriptionStore {
-	return &SubscriptionStore{executor: db}
+	return &SubscriptionStore{db: db}
 }
 
-func (s *SubscriptionStore) WithTx(tx *sql.Tx) *SubscriptionStore {
-	return &SubscriptionStore{executor: tx}
-}
-
-func (s *SubscriptionStore) Create(ctx context.Context, userId int64, trackedRepositoryId int64) (domain.Subscription, error) {
+func (s *SubscriptionStore) Create(ctx context.Context, tx *sql.Tx, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
 	query := `
 		insert into subscriptions (user_id, tracked_repository_id)
 		values ($1, $2)
@@ -41,7 +28,7 @@ func (s *SubscriptionStore) Create(ctx context.Context, userId int64, trackedRep
 
 	var created domain.Subscription
 
-	err := s.executor.QueryRowContext(ctx, query, userId, trackedRepositoryId).Scan(
+	err := newQueryExecutor(s.db, tx).QueryRowContext(ctx, query, userID, trackedRepositoryID).Scan(
 		&created.ID,
 		&created.UserID,
 		&created.TrackedRepositoryID,
@@ -70,7 +57,7 @@ func (s *SubscriptionStore) SetConfirmedByTokenAndConfirmedNotTrue(ctx context.C
 		where confirmation_token=$1 and confirmed=false;
 	`
 
-	result, err := s.executor.ExecContext(ctx, query, confirmationToken)
+	result, err := s.db.ExecContext(ctx, query, confirmationToken)
 	if err != nil {
 		return err
 	}
@@ -93,7 +80,7 @@ func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cance
 		where cancellation_token=$1;
 	`
 
-	result, err := s.executor.ExecContext(ctx, query, cancellationToken)
+	result, err := s.db.ExecContext(ctx, query, cancellationToken)
 	if err != nil {
 		return err
 	}
@@ -124,7 +111,7 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]re
 		order by tr.owner, tr.name;
 	`
 
-	rows, err := s.executor.QueryContext(ctx, query, email)
+	rows, err := s.db.QueryContext(ctx, query, email)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +155,7 @@ func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Con
 		order by tr.id, u.email;
 	`
 
-	rows, err := s.executor.QueryContext(ctx, query)
+	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

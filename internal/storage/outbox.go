@@ -10,24 +10,20 @@ import (
 )
 
 type OutboxStore struct {
-	executor executor
+	db *sql.DB
 }
 
 func NewOutboxStore(db *sql.DB) *OutboxStore {
-	return &OutboxStore{executor: db}
+	return &OutboxStore{db: db}
 }
 
-func (s *OutboxStore) WithTx(tx *sql.Tx) *OutboxStore {
-	return &OutboxStore{executor: tx}
-}
-
-func (s *OutboxStore) Create(ctx context.Context, recipientEmail string, email outbox.Email) error {
+func (s *OutboxStore) Create(ctx context.Context, tx *sql.Tx, recipientEmail string, email outbox.Email) error {
 	query := `
 		insert into mail_outbox (recipient_email, subject, html_body)
 		values ($1, $2, $3);
 	`
 
-	_, err := s.executor.ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
+	_, err := newQueryExecutor(s.db, tx).ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
 	return err
 }
 
@@ -55,7 +51,7 @@ func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSec
 	`
 
 	var result outbox.Email
-	err := s.executor.QueryRowContext(ctx, query, processingTimeoutSeconds).Scan(
+	err := s.db.QueryRowContext(ctx, query, processingTimeoutSeconds).Scan(
 		&result.ID,
 		&result.RecipientEmail,
 		&result.Subject,
@@ -88,7 +84,7 @@ func (s *OutboxStore) MarkSent(ctx context.Context, id int64) error {
 		where id = $1;
 	`
 
-	_, err := s.executor.ExecContext(ctx, query, id)
+	_, err := s.db.ExecContext(ctx, query, id)
 	return err
 }
 
@@ -101,6 +97,6 @@ func (s *OutboxStore) Release(ctx context.Context, id int64, lastError string) e
 		where id = $1;
 	`
 
-	_, err := s.executor.ExecContext(ctx, query, id, lastError)
+	_, err := s.db.ExecContext(ctx, query, id, lastError)
 	return err
 }

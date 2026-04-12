@@ -7,24 +7,15 @@ import (
 	"github-release-notifier/internal/domain"
 )
 
-type UserRepository interface {
-	CreateIfNotExists(ctx context.Context, email string) (domain.User, error)
-	WithTx(tx *sql.Tx) *UserStore
-}
-
 type UserStore struct {
-	executor executor
+	db *sql.DB
 }
 
 func NewUserStore(db *sql.DB) *UserStore {
-	return &UserStore{executor: db}
+	return &UserStore{db: db}
 }
 
-func (s *UserStore) WithTx(tx *sql.Tx) *UserStore {
-	return &UserStore{executor: tx}
-}
-
-func (s *UserStore) CreateIfNotExists(ctx context.Context, email string) (domain.User, error) {
+func (s *UserStore) CreateIfNotExists(ctx context.Context, tx *sql.Tx, email string) (domain.User, error) {
 	query := `
 		insert into users (email)
 		values ($1)
@@ -35,7 +26,7 @@ func (s *UserStore) CreateIfNotExists(ctx context.Context, email string) (domain
 
 	var result domain.User
 
-	err := s.executor.QueryRowContext(ctx, query, email).Scan(
+	err := newQueryExecutor(s.db, tx).QueryRowContext(ctx, query, email).Scan(
 		&result.ID,
 		&result.Email,
 		&result.CreatedAt,

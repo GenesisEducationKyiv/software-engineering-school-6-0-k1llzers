@@ -15,26 +15,26 @@ import (
 const defaultReleaseCheckInterval = time.Minute
 
 type ReleaseMonitor struct {
-	txManager              txManager
-	repositoriesWithTx     TxTrackedRepositoryStoreFactory
-	subscriptions          SubscriptionStore
-	releaseClient          githubReleaseClient
-	transactionalMailQueue mail.QueueFactory
+	txManager     txManager
+	repositories  TrackedRepositoryStore
+	subscriptions SubscriptionStore
+	releaseClient githubReleaseClient
+	mailQueue     mail.Queue
 }
 
 func NewReleaseMonitor(
 	txManager txManager,
-	repositoriesWithTx TxTrackedRepositoryStoreFactory,
+	repositories TrackedRepositoryStore,
 	subscriptions SubscriptionStore,
 	releaseClient githubReleaseClient,
-	transactionalMailQueue mail.QueueFactory,
+	mailQueue mail.Queue,
 ) *ReleaseMonitor {
 	return &ReleaseMonitor{
-		txManager:              txManager,
-		repositoriesWithTx:     repositoriesWithTx,
-		subscriptions:          subscriptions,
-		releaseClient:          releaseClient,
-		transactionalMailQueue: transactionalMailQueue,
+		txManager:     txManager,
+		repositories:  repositories,
+		subscriptions: subscriptions,
+		releaseClient: releaseClient,
+		mailQueue:     mailQueue,
 	}
 }
 
@@ -77,17 +77,14 @@ func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
 
 		releaseURL := buildReleaseURL(group.owner, group.name, release.TagName, release.HTMLURL)
 		err = m.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
-			repositories := m.repositoriesWithTx(tx)
-			notifications := m.transactionalMailQueue.WithTx(tx)
-
 			for _, subscription := range group.subscriptions {
 				repositoryFullName := subscription.Owner + "/" + subscription.Name
-				if err := notifications.QueueReleaseNotification(ctx, subscription.Email, repositoryFullName, release.TagName, releaseURL, subscription.CancellationToken); err != nil {
+				if err := m.mailQueue.QueueReleaseNotification(ctx, tx, subscription.Email, repositoryFullName, release.TagName, releaseURL, subscription.CancellationToken); err != nil {
 					return err
 				}
 			}
 
-			return repositories.UpdateLastSeenTag(ctx, group.trackedRepositoryID, release.TagName)
+			return m.repositories.UpdateLastSeenTag(ctx, tx, group.trackedRepositoryID, release.TagName)
 		})
 		if err != nil {
 			checkErrors = append(checkErrors, fmt.Errorf("%s/%s enqueue: %w", group.owner, group.name, err))

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ .Subject }}</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#f4f7fb;font-family:Arial,sans-serif;color:#172033;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:12px;padding:40px 32px;">
+          <tr>
+            <td>
+              <h1 style="margin:0 0 20px;font-size:24px;line-height:32px;">Новий реліз</h1>
+              <p style="margin:0 0 16px;font-size:16px;line-height:24px;">
+                Для репозиторію <strong>{{ .RepositoryFullName }}</strong> вийшов новий реліз <strong>{{ .TagName }}</strong>.
+              </p>
+              <p style="margin:32px 0;">
+                <a href="{{ .ReleaseURL }}" style="display:inline-block;padding:14px 24px;background:#1f6feb;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;">
+                  Переглянути реліз
+                </a>
+              </p>
+              <p style="margin:0;font-size:14px;line-height:22px;color:#5b6577;">
+                Якщо ви більше не хочете отримувати сповіщення про релізи цього репозиторію, скористайтеся посиланням:
+                <a href="{{ .CancellationURL }}">{{ .CancellationURL }}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

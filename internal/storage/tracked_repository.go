@@ -44,3 +44,15 @@ func (s *TrackedRepositoryStore) CreatIfNotExists(ctx context.Context, owner str
 
 	return created, nil
 }
+
+func (s *TrackedRepositoryStore) UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error {
+	query := `
+		update tracked_repositories
+		set last_seen_tag = $2,
+			updated_at = now()
+		where id = $1;
+	`
+
+	_, err := s.executor.ExecContext(ctx, query, trackedRepositoryID, lastSeenTag)
+	return err
+}

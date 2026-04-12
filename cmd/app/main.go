@@ -30,9 +30,11 @@ func main() {
 	}
 
 	transactionManager := db.NewTransactionManager(pg)
+	appCtx := context.Background()
 	userStore := storage.NewUserStore(pg)
 	trackedRepositoryStore := storage.NewTrackedRepositoryStore(pg)
 	subscriptionStore := storage.NewSubscriptionStore(pg)
+	outboxStore := storage.NewOutboxStore(pg)
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
 	templateRenderer, err := mail.NewTemplateRenderer()
 	if err != nil {
@@ -50,7 +52,8 @@ func main() {
 		})
 	}
 
-	mailService := mail.NewService(templateRenderer, sender, cfg.Mail.ApiBaseUrl)
+	mailService := mail.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
+	mailDispatcher := mail.NewDispatcher(outboxStore, sender)
 
 	subscriptionService := service.NewSubscriptionServiceFromStorage(
 		transactionManager,
@@ -60,8 +63,18 @@ func main() {
 		githubClient,
 		mailService,
 	)
+	releaseChecker := service.NewReleaseCheckerServiceFromStorage(
+		transactionManager,
+		trackedRepositoryStore,
+		subscriptionStore,
+		githubClient,
+		mailService,
+	)
 
 	router := httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService))
+
+	go mailDispatcher.Run(appCtx)
+	go releaseChecker.Run(appCtx)
 
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("run http server: %v", err)

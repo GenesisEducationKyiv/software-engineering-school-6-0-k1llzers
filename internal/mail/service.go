@@ -2,31 +2,49 @@ package mail
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
+
+	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/storage"
 
 	"github.com/google/uuid"
 )
 
-type confirmationRenderer interface {
+type renderer interface {
 	RenderConfirmationEmail(data ConfirmationTemplateData) (RenderedEmail, error)
+	RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error)
+}
+
+type Queue interface {
+	QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
+	QueueReleaseNotification(ctx context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error
 }
 
 type Service struct {
-	renderer   confirmationRenderer
-	sender     Sender
-	apiBaseUrl string
+	renderer   renderer
+	outbox     *storage.OutboxStore
+	apiBaseURL string
 }
 
-func NewService(renderer confirmationRenderer, sender Sender, apiBaseUrl string) *Service {
+func NewService(renderer renderer, outbox *storage.OutboxStore, apiBaseURL string) *Service {
 	return &Service{
 		renderer:   renderer,
-		sender:     sender,
-		apiBaseUrl: strings.TrimRight(apiBaseUrl, "/"),
+		outbox:     outbox,
+		apiBaseURL: strings.TrimRight(apiBaseURL, "/"),
 	}
 }
 
-func (s *Service) SendSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
+func (s *Service) WithTx(tx *sql.Tx) Queue {
+	return &Service{
+		renderer:   s.renderer,
+		outbox:     s.outbox.WithTx(tx),
+		apiBaseURL: s.apiBaseURL,
+	}
+}
+
+func (s *Service) QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
 	email, err := s.renderer.RenderConfirmationEmail(ConfirmationTemplateData{
 		RepositoryFullName: repositoryFullName,
 		ConfirmationURL:    s.buildConfirmationURL(confirmationToken),
@@ -36,17 +54,43 @@ func (s *Service) SendSubscriptionConfirmation(ctx context.Context, recipientEma
 		return fmt.Errorf("render confirmation email: %w", err)
 	}
 
-	if err := s.sender.Send(ctx, recipientEmail, email); err != nil {
-		return fmt.Errorf("send confirmation email: %w", err)
+	if err := s.outbox.Create(ctx, recipientEmail, toOutboxEmail(email)); err != nil {
+		return fmt.Errorf("enqueue confirmation email: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) QueueReleaseNotification(ctx context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
+	email, err := s.renderer.RenderReleaseEmail(ReleaseTemplateData{
+		RepositoryFullName: repositoryFullName,
+		TagName:            tagName,
+		ReleaseURL:         releaseURL,
+		CancellationURL:    s.buildCancellationURL(cancellationToken),
+	})
+	if err != nil {
+		return fmt.Errorf("render release email: %w", err)
+	}
+
+	if err := s.outbox.Create(ctx, recipientEmail, toOutboxEmail(email)); err != nil {
+		return fmt.Errorf("enqueue release email: %w", err)
 	}
 
 	return nil
 }
 
 func (s *Service) buildConfirmationURL(confirmationToken uuid.UUID) string {
-	return s.apiBaseUrl + "/confirm/" + confirmationToken.String()
+	return s.apiBaseURL + "/confirm/" + confirmationToken.String()
 }
 
 func (s *Service) buildCancellationURL(cancellationToken uuid.UUID) string {
-	return s.apiBaseUrl + "/unsubscribe/" + cancellationToken.String()
+	return s.apiBaseURL + "/unsubscribe/" + cancellationToken.String()
+}
+
+func toOutboxEmail(email RenderedEmail) domain.OutboxEmail {
+	return domain.OutboxEmail{
+		Subject:  email.Subject,
+		HTMLBody: email.HTMLBody,
+		TextBody: email.TextBody,
+	}
 }

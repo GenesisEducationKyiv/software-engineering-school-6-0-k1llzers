@@ -6,8 +6,7 @@ import (
 	"strings"
 
 	"github-release-notifier/internal/domain"
-
-	"github.com/google/uuid"
+	"github-release-notifier/internal/mail"
 )
 
 type transactionManager interface {
@@ -21,6 +20,7 @@ type userCreator interface {
 
 type trackedRepositoryProvider interface {
 	CreatIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
+	UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error
 	WithTx(tx *sql.Tx) trackedRepositoryProvider
 }
 
@@ -29,6 +29,7 @@ type subscriptionCreator interface {
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
 	ListByEmail(ctx context.Context, email string) ([]domain.SubscriptionView, error)
+	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]domain.ConfirmedRepositorySubscription, error)
 	WithTx(tx *sql.Tx) subscriptionCreator
 }
 
@@ -36,8 +37,8 @@ type gitRepositoryProvider interface {
 	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
-type subscriptionConfirmationSender interface {
-	SendSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
+type notificationQueueFactory interface {
+	WithTx(tx *sql.Tx) mail.Queue
 }
 
 type SubscriptionService struct {
@@ -46,7 +47,7 @@ type SubscriptionService struct {
 	trackedRepositories   trackedRepositoryProvider
 	subscriptions         subscriptionCreator
 	gitRepositoryProvider gitRepositoryProvider
-	confirmationSender    subscriptionConfirmationSender
+	notifications         notificationQueueFactory
 }
 
 func NewSubscriptionService(
@@ -55,7 +56,7 @@ func NewSubscriptionService(
 	trackedRepositories trackedRepositoryProvider,
 	subscriptions subscriptionCreator,
 	gitRepositoryProvider gitRepositoryProvider,
-	confirmationSender subscriptionConfirmationSender,
+	notifications notificationQueueFactory,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		transactionManager:    transactionManager,
@@ -63,7 +64,7 @@ func NewSubscriptionService(
 		trackedRepositories:   trackedRepositories,
 		subscriptions:         subscriptions,
 		gitRepositoryProvider: gitRepositoryProvider,
-		confirmationSender:    confirmationSender,
+		notifications:         notifications,
 	}
 }
 
@@ -84,6 +85,7 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 		users := s.users.WithTx(tx)
 		trackedRepositories := s.trackedRepositories.WithTx(tx)
 		subscriptions := s.subscriptions.WithTx(tx)
+		notifications := s.notifications.WithTx(tx)
 
 		user, err := users.CreateIfNotExists(ctx, email)
 		if err != nil {
@@ -100,7 +102,7 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 			return err
 		}
 
-		if err := s.confirmationSender.SendSubscriptionConfirmation(ctx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken); err != nil {
+		if err := notifications.QueueSubscriptionConfirmation(ctx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken); err != nil {
 			return err
 		}
 

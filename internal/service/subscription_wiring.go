@@ -30,6 +30,10 @@ func (a trackedRepositoryStoreAdapter) CreatIfNotExists(ctx context.Context, own
 	return a.store.CreatIfNotExists(ctx, owner, name, lastSeenTag)
 }
 
+func (a trackedRepositoryStoreAdapter) UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error {
+	return a.store.UpdateLastSeenTag(ctx, trackedRepositoryID, lastSeenTag)
+}
+
 func (a trackedRepositoryStoreAdapter) WithTx(tx *sql.Tx) trackedRepositoryProvider {
 	return trackedRepositoryStoreAdapter{store: a.store.WithTx(tx)}
 }
@@ -52,6 +56,10 @@ func (a subscriptionStoreAdapter) DeleteByCancellationToken(ctx context.Context,
 
 func (a subscriptionStoreAdapter) ListByEmail(ctx context.Context, email string) ([]domain.SubscriptionView, error) {
 	return a.store.ListByEmail(ctx, email)
+}
+
+func (a subscriptionStoreAdapter) ListConfirmedRepositorySubscriptions(ctx context.Context) ([]domain.ConfirmedRepositorySubscription, error) {
+	return a.store.ListConfirmedRepositorySubscriptions(ctx)
 }
 
 func (a subscriptionStoreAdapter) WithTx(tx *sql.Tx) subscriptionCreator {
@@ -81,5 +89,21 @@ func NewSubscriptionServiceFromStorage(
 		subscriptionStoreAdapter{store: subscriptions},
 		githubClientAdapter{client: githubClient},
 		confirmationSender,
+	)
+}
+
+func NewReleaseCheckerServiceFromStorage(
+	transactionManager transactionManager,
+	trackedRepositories *storage.TrackedRepositoryStore,
+	subscriptions *storage.SubscriptionStore,
+	githubClient *ghclient.Client,
+	notifications *mail.Service,
+) *ReleaseCheckerService {
+	return NewReleaseCheckerService(
+		transactionManager,
+		trackedRepositoryStoreAdapter{store: trackedRepositories},
+		subscriptionStoreAdapter{store: subscriptions},
+		githubClientAdapter{client: githubClient},
+		notifications,
 	)
 }

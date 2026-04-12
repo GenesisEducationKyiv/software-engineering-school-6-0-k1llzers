@@ -141,3 +141,49 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]do
 
 	return subscriptions, nil
 }
+
+func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Context) ([]domain.ConfirmedRepositorySubscription, error) {
+	query := `
+		select
+			tr.id,
+			tr.owner,
+			tr.name,
+			coalesce(tr.last_seen_tag, ''),
+			u.email,
+			s.cancellation_token
+		from subscriptions s
+		join users u on u.id = s.user_id
+		join tracked_repositories tr on tr.id = s.tracked_repository_id
+		where s.confirmed = true
+		order by tr.id, u.email;
+	`
+
+	rows, err := s.executor.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subscriptions []domain.ConfirmedRepositorySubscription
+	for rows.Next() {
+		var item domain.ConfirmedRepositorySubscription
+		if err := rows.Scan(
+			&item.TrackedRepositoryID,
+			&item.Owner,
+			&item.Name,
+			&item.LastSeenTag,
+			&item.Email,
+			&item.CancellationToken,
+		); err != nil {
+			return nil, err
+		}
+
+		subscriptions = append(subscriptions, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return subscriptions, nil
+}

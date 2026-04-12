@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github-release-notifier/internal/domain"
+
+	"github.com/google/uuid"
 )
 
 type transactionManager interface {
@@ -24,11 +26,17 @@ type trackedRepositoryProvider interface {
 
 type subscriptionCreator interface {
 	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
+	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
+	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
 	WithTx(tx *sql.Tx) subscriptionCreator
 }
 
 type gitRepositoryProvider interface {
 	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
+}
+
+type subscriptionConfirmationSender interface {
+	SendSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
 }
 
 type SubscriptionService struct {
@@ -37,6 +45,7 @@ type SubscriptionService struct {
 	trackedRepositories   trackedRepositoryProvider
 	subscriptions         subscriptionCreator
 	gitRepositoryProvider gitRepositoryProvider
+	confirmationSender    subscriptionConfirmationSender
 }
 
 func NewSubscriptionService(
@@ -45,6 +54,7 @@ func NewSubscriptionService(
 	trackedRepositories trackedRepositoryProvider,
 	subscriptions subscriptionCreator,
 	gitRepositoryProvider gitRepositoryProvider,
+	confirmationSender subscriptionConfirmationSender,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		transactionManager:    transactionManager,
@@ -52,18 +62,19 @@ func NewSubscriptionService(
 		trackedRepositories:   trackedRepositories,
 		subscriptions:         subscriptions,
 		gitRepositoryProvider: gitRepositoryProvider,
+		confirmationSender:    confirmationSender,
 	}
 }
 
-func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repositoryFullName string) (domain.Subscription, error) {
+func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repositoryFullName string) error {
 	owner, repoName, err := splitRepositoryFullName(repositoryFullName)
 	if err != nil {
-		return domain.Subscription{}, err
+		return err
 	}
 
 	repository, err := s.gitRepositoryProvider.GetLatestRelease(ctx, owner, repoName)
 	if err != nil {
-		return domain.Subscription{}, err
+		return err
 	}
 
 	var subscription domain.Subscription
@@ -88,13 +99,25 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 			return err
 		}
 
+		if err := s.confirmationSender.SendSubscriptionConfirmation(ctx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken); err != nil {
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
-		return domain.Subscription{}, err
+		return err
 	}
 
-	return subscription, nil
+	return nil
+}
+
+func (s *SubscriptionService) ConfirmSubscription(ctx context.Context, token string) error {
+	return s.subscriptions.SetConfirmedByTokenAndConfirmedNotTrue(ctx, token)
+}
+
+func (s *SubscriptionService) CancelSubscription(ctx context.Context, token string) error {
+	return s.subscriptions.DeleteByCancellationToken(ctx, token)
 }
 
 func splitRepositoryFullName(repositoryFullName string) (string, string, error) {

@@ -24,7 +24,7 @@ func (s *TrackedRepositoryStore) CreatIfNotExists(ctx context.Context, owner str
 		values ($1, $2, $3)
 		on conflict (owner, name) 
 		do update 
-		    set last_seen_tag = $3
+		    set updated_at = now()
 		returning id, owner, name, last_seen_tag, created_at, updated_at
 	`
 

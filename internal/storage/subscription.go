@@ -52,3 +52,50 @@ func (s *SubscriptionStore) Create(ctx context.Context, userId int64, trackedRep
 
 	return created, nil
 }
+
+func (s *SubscriptionStore) SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error {
+	query := `
+		update subscriptions 
+			set confirmed=true 
+		where confirmation_token=$1 and confirmed=false;
+	`
+
+	result, err := s.executor.ExecContext(ctx, query, confirmationToken)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+
+	return nil
+}
+
+func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cancellationToken string) error {
+	query := `
+		delete from subscriptions 
+		where cancellation_token=$1;
+	`
+
+	result, err := s.executor.ExecContext(ctx, query, cancellationToken)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrNotFound
+	}
+
+	return nil
+}

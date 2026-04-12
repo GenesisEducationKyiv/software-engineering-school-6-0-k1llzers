@@ -50,13 +50,17 @@ func (s *SMTPSender) Send(ctx context.Context, to string, email RenderedEmail) e
 	if err != nil {
 		return fmt.Errorf("dial smtp server: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	client, err := smtp.NewClient(conn, s.host)
 	if err != nil {
 		return fmt.Errorf("create smtp client: %w", err)
 	}
-	defer client.Quit()
+	defer func() {
+		_ = client.Quit()
+	}()
 
 	if ok, _ := client.Extension("STARTTLS"); ok {
 		if err := client.StartTLS(&tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}); err != nil {

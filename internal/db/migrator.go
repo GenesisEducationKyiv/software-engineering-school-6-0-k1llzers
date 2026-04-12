@@ -64,7 +64,9 @@ func loadAppliedMigrations(ctx context.Context, db *sql.DB) (map[string]bool, er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	applied := make(map[string]bool)
 	for rows.Next() {

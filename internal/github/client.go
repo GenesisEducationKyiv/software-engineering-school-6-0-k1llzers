@@ -51,7 +51,9 @@ func (c *Client) RepositoryExists(ctx context.Context, owner string, repoName st
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -70,7 +72,9 @@ func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName st
 	if err != nil {
 		return domain.Release{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return domain.Release{}, domain.ErrNoReleases

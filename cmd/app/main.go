@@ -23,7 +23,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("open postgres: %v", err)
 	}
-	defer pg.Close()
+	defer func() {
+		if err := pg.Close(); err != nil {
+			log.Printf("close postgres: %v", err)
+		}
+	}()
 
 	if err := db.RunMigrations(context.Background(), pg, "migrations"); err != nil {
 		log.Fatalf("run migrations: %v", err)

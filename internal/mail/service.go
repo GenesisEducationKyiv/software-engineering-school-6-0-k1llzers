@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github-release-notifier/internal/outbox"
-	"github-release-notifier/internal/storage"
 
 	"github.com/google/uuid"
 )
@@ -17,6 +16,10 @@ type renderer interface {
 	RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error)
 }
 
+type outboxWriter interface {
+	Create(ctx context.Context, tx *sql.Tx, recipientEmail string, email outbox.Email) error
+}
+
 type Queue interface {
 	QueueSubscriptionConfirmation(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
 	QueueReleaseNotification(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error
@@ -24,11 +27,11 @@ type Queue interface {
 
 type Service struct {
 	renderer   renderer
-	outbox     *storage.OutboxStore
+	outbox     outboxWriter
 	apiBaseURL string
 }
 
-func NewService(renderer renderer, outbox *storage.OutboxStore, apiBaseURL string) *Service {
+func NewService(renderer renderer, outbox outboxWriter, apiBaseURL string) *Service {
 	return &Service{
 		renderer:   renderer,
 		outbox:     outbox,

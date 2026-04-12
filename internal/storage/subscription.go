@@ -124,7 +124,9 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]re
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var subscriptions []readmodel.SubscriptionView
 	for rows.Next() {
@@ -168,7 +170,9 @@ func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Con
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var subscriptions []readmodel.ConfirmedRepositorySubscription
 	for rows.Next() {

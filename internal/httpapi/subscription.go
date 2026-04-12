@@ -57,7 +57,7 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 		case errors.Is(err, domain.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		case errors.Is(err, domain.ErrRateLimited):
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "github is temporarily unavailable, please try again later"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		}

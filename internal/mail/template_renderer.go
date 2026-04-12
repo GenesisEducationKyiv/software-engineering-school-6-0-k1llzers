@@ -6,7 +6,7 @@ import (
 	"html/template"
 )
 
-const confirmationEmailSubject = "Підтвердження підписки на релізи GitHub"
+const confirmationEmailSubject = "Confirm your GitHub release subscription"
 
 //go:embed templates/*.tmpl
 var templateFS embed.FS
@@ -72,7 +72,7 @@ func (r *TemplateRenderer) RenderConfirmationEmail(data ConfirmationTemplateData
 }
 
 func (r *TemplateRenderer) RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error) {
-	subject := "Новий реліз " + data.RepositoryFullName + ": " + data.TagName
+	subject := "New release for " + data.RepositoryFullName + ": " + data.TagName
 	payload := struct {
 		Subject string
 		ReleaseTemplateData

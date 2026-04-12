@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github-release-notifier/internal/config"
@@ -45,6 +46,10 @@ func main() {
 		log.Fatalf("create mail template renderer: %v", err)
 	}
 
+	if err := validateMailConfig(cfg.Mail); err != nil {
+		log.Fatalf("invalid mail config: %v", err)
+	}
+
 	sender := newMailSender(cfg.Mail)
 	mailService := mail.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
 	outboxDispatcher := mail.NewOutboxDispatcher(outboxStore, sender)
@@ -76,10 +81,6 @@ func main() {
 }
 
 func newMailSender(cfg config.MailConfig) mail.Sender {
-	if cfg.Host == "" || cfg.From == "" || cfg.ApiBaseUrl == "" {
-		return mail.NewNoopSender()
-	}
-
 	return mail.NewSMTPSender(mail.SMTPConfig{
 		Host:     cfg.Host,
 		Port:     cfg.Port,
@@ -87,4 +88,17 @@ func newMailSender(cfg config.MailConfig) mail.Sender {
 		Password: cfg.Password,
 		From:     cfg.From,
 	})
+}
+
+func validateMailConfig(cfg config.MailConfig) error {
+	switch {
+	case cfg.Host == "":
+		return errors.New("mail.host is required")
+	case cfg.From == "":
+		return errors.New("mail.from is required")
+	case cfg.ApiBaseUrl == "":
+		return errors.New("mail.api_base_url is required")
+	default:
+		return nil
+	}
 }

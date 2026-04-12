@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/outbox"
 	"github-release-notifier/internal/storage"
 
 	"github.com/google/uuid"
@@ -20,6 +20,10 @@ type renderer interface {
 type Queue interface {
 	QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
 	QueueReleaseNotification(ctx context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error
+}
+
+type QueueFactory interface {
+	WithTx(tx *sql.Tx) Queue
 }
 
 type Service struct {
@@ -87,10 +91,9 @@ func (s *Service) buildCancellationURL(cancellationToken uuid.UUID) string {
 	return s.apiBaseURL + "/unsubscribe/" + cancellationToken.String()
 }
 
-func toOutboxEmail(email RenderedEmail) domain.OutboxEmail {
-	return domain.OutboxEmail{
+func toOutboxEmail(email RenderedEmail) outbox.Email {
+	return outbox.Email{
 		Subject:  email.Subject,
 		HTMLBody: email.HTMLBody,
-		TextBody: email.TextBody,
 	}
 }

@@ -1,13 +1,12 @@
-package domain
+package outbox
 
 import "time"
 
-type OutboxEmail struct {
+type Email struct {
 	ID                  int64
 	RecipientEmail      string
 	Subject             string
 	HTMLBody            string
-	TextBody            string
 	Attempts            int
 	ProcessingStartedAt *time.Time
 	SentAt              *time.Time

@@ -6,9 +6,19 @@ import (
 	"errors"
 
 	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/readmodel"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+type SubscriptionRepository interface {
+	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
+	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
+	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
+	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
+	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error)
+	WithTx(tx *sql.Tx) *SubscriptionStore
+}
 
 type SubscriptionStore struct {
 	executor executor
@@ -100,7 +110,7 @@ func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cance
 	return nil
 }
 
-func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]domain.SubscriptionView, error) {
+func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error) {
 	query := `
 		select
 			u.email,
@@ -120,9 +130,9 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]do
 	}
 	defer rows.Close()
 
-	var subscriptions []domain.SubscriptionView
+	var subscriptions []readmodel.SubscriptionView
 	for rows.Next() {
-		var item domain.SubscriptionView
+		var item readmodel.SubscriptionView
 		if err := rows.Scan(
 			&item.Email,
 			&item.Repo,
@@ -142,7 +152,7 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]do
 	return subscriptions, nil
 }
 
-func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Context) ([]domain.ConfirmedRepositorySubscription, error) {
+func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error) {
 	query := `
 		select
 			tr.id,
@@ -164,9 +174,9 @@ func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Con
 	}
 	defer rows.Close()
 
-	var subscriptions []domain.ConfirmedRepositorySubscription
+	var subscriptions []readmodel.ConfirmedRepositorySubscription
 	for rows.Next() {
-		var item domain.ConfirmedRepositorySubscription
+		var item readmodel.ConfirmedRepositorySubscription
 		if err := rows.Scan(
 			&item.TrackedRepositoryID,
 			&item.Owner,

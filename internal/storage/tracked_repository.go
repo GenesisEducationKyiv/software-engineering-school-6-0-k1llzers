@@ -6,6 +6,12 @@ import (
 	"github-release-notifier/internal/domain"
 )
 
+type TrackedRepositoryRepository interface {
+	CreatIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
+	UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error
+	WithTx(tx *sql.Tx) *TrackedRepositoryStore
+}
+
 type TrackedRepositoryStore struct {
 	executor executor
 }

@@ -3,7 +3,6 @@ create table if not exists mail_outbox (
     recipient_email varchar(255) not null,
     subject varchar(255) not null,
     html_body text not null,
-    text_body text not null,
     attempts integer not null default 0,
     processing_started_at timestamptz,
     sent_at timestamptz,

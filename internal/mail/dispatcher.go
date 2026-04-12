@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/outbox"
 )
 
 const (
@@ -14,25 +15,25 @@ const (
 	defaultOutboxProcessingTimeout = 60
 )
 
-type outboxDispatcherStore interface {
-	ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (domain.OutboxEmail, error)
+type outboxStore interface {
+	ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (outbox.Email, error)
 	MarkSent(ctx context.Context, id int64) error
 	Release(ctx context.Context, id int64, lastError string) error
 }
 
-type Dispatcher struct {
-	store  outboxDispatcherStore
+type OutboxDispatcher struct {
+	store  outboxStore
 	sender Sender
 }
 
-func NewDispatcher(store outboxDispatcherStore, sender Sender) *Dispatcher {
-	return &Dispatcher{
+func NewOutboxDispatcher(store outboxStore, sender Sender) *OutboxDispatcher {
+	return &OutboxDispatcher{
 		store:  store,
 		sender: sender,
 	}
 }
 
-func (d *Dispatcher) Run(ctx context.Context) {
+func (d *OutboxDispatcher) Run(ctx context.Context) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -61,7 +62,6 @@ func (d *Dispatcher) Run(ctx context.Context) {
 		sendErr := d.sender.Send(ctx, email.RecipientEmail, RenderedEmail{
 			Subject:  email.Subject,
 			HTMLBody: email.HTMLBody,
-			TextBody: email.TextBody,
 		})
 		if sendErr != nil {
 			if err := d.store.Release(ctx, email.ID, sendErr.Error()); err != nil {

@@ -5,44 +5,46 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
-	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/mail"
+	"github-release-notifier/internal/readmodel"
 )
 
 const defaultReleaseCheckInterval = time.Minute
 
-type ReleaseCheckerService struct {
-	transactionManager    transactionManager
-	trackedRepositories   trackedRepositoryProvider
-	subscriptions         subscriptionCreator
-	gitRepositoryProvider gitRepositoryProvider
-	notifications         notificationQueueFactory
+type ReleaseMonitor struct {
+	txManager              txManager
+	repositoriesWithTx     TxTrackedRepositoryStoreFactory
+	subscriptions          SubscriptionStore
+	releaseClient          githubReleaseClient
+	transactionalMailQueue mail.QueueFactory
 }
 
-func NewReleaseCheckerService(
-	transactionManager transactionManager,
-	trackedRepositories trackedRepositoryProvider,
-	subscriptions subscriptionCreator,
-	gitRepositoryProvider gitRepositoryProvider,
-	notifications notificationQueueFactory,
-) *ReleaseCheckerService {
-	return &ReleaseCheckerService{
-		transactionManager:    transactionManager,
-		trackedRepositories:   trackedRepositories,
-		subscriptions:         subscriptions,
-		gitRepositoryProvider: gitRepositoryProvider,
-		notifications:         notifications,
+func NewReleaseMonitor(
+	txManager txManager,
+	repositoriesWithTx TxTrackedRepositoryStoreFactory,
+	subscriptions SubscriptionStore,
+	releaseClient githubReleaseClient,
+	transactionalMailQueue mail.QueueFactory,
+) *ReleaseMonitor {
+	return &ReleaseMonitor{
+		txManager:              txManager,
+		repositoriesWithTx:     repositoriesWithTx,
+		subscriptions:          subscriptions,
+		releaseClient:          releaseClient,
+		transactionalMailQueue: transactionalMailQueue,
 	}
 }
 
-func (s *ReleaseCheckerService) Run(ctx context.Context) {
+func (m *ReleaseMonitor) Run(ctx context.Context) {
 	ticker := time.NewTicker(defaultReleaseCheckInterval)
 	defer ticker.Stop()
 
 	for {
-		if err := s.CheckOnce(ctx); err != nil && ctx.Err() == nil {
-			fmt.Printf("release check failed: %v\n", err)
+		if err := m.CheckOnce(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("release monitor failed: %v", err)
 		}
 
 		select {
@@ -53,19 +55,19 @@ func (s *ReleaseCheckerService) Run(ctx context.Context) {
 	}
 }
 
-func (s *ReleaseCheckerService) CheckOnce(ctx context.Context) error {
-	subscriptions, err := s.subscriptions.ListConfirmedRepositorySubscriptions(ctx)
+func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
+	subscriptions, err := m.subscriptions.ListConfirmedRepositorySubscriptions(ctx)
 	if err != nil {
 		return err
 	}
 
-	grouped := groupConfirmedSubscriptions(subscriptions)
-	var errs []error
+	groupedSubscriptions := groupConfirmedSubscriptions(subscriptions)
+	var checkErrors []error
 
-	for _, group := range grouped {
-		release, err := s.gitRepositoryProvider.GetLatestRelease(ctx, group.owner, group.name)
+	for _, group := range groupedSubscriptions {
+		release, err := m.releaseClient.GetLatestRelease(ctx, group.owner, group.name)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s/%s: %w", group.owner, group.name, err))
+			checkErrors = append(checkErrors, fmt.Errorf("%s/%s: %w", group.owner, group.name, err))
 			continue
 		}
 
@@ -74,9 +76,9 @@ func (s *ReleaseCheckerService) CheckOnce(ctx context.Context) error {
 		}
 
 		releaseURL := buildReleaseURL(group.owner, group.name, release.TagName, release.HTMLURL)
-		err = s.transactionManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
-			trackedRepositories := s.trackedRepositories.WithTx(tx)
-			notifications := s.notifications.WithTx(tx)
+		err = m.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
+			repositories := m.repositoriesWithTx(tx)
+			notifications := m.transactionalMailQueue.WithTx(tx)
 
 			for _, subscription := range group.subscriptions {
 				repositoryFullName := subscription.Owner + "/" + subscription.Name
@@ -85,14 +87,14 @@ func (s *ReleaseCheckerService) CheckOnce(ctx context.Context) error {
 				}
 			}
 
-			return trackedRepositories.UpdateLastSeenTag(ctx, group.trackedRepositoryID, release.TagName)
+			return repositories.UpdateLastSeenTag(ctx, group.trackedRepositoryID, release.TagName)
 		})
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s/%s enqueue: %w", group.owner, group.name, err))
+			checkErrors = append(checkErrors, fmt.Errorf("%s/%s enqueue: %w", group.owner, group.name, err))
 		}
 	}
 
-	return errors.Join(errs...)
+	return errors.Join(checkErrors...)
 }
 
 type confirmedSubscriptionGroup struct {
@@ -100,28 +102,28 @@ type confirmedSubscriptionGroup struct {
 	owner               string
 	name                string
 	lastSeenTag         string
-	subscriptions       []domain.ConfirmedRepositorySubscription
+	subscriptions       []readmodel.ConfirmedRepositorySubscription
 }
 
-func groupConfirmedSubscriptions(items []domain.ConfirmedRepositorySubscription) []confirmedSubscriptionGroup {
-	indexByRepoID := make(map[int64]int)
+func groupConfirmedSubscriptions(items []readmodel.ConfirmedRepositorySubscription) []confirmedSubscriptionGroup {
+	groupIndexByRepositoryID := make(map[int64]int)
 	groups := make([]confirmedSubscriptionGroup, 0)
 
 	for _, item := range items {
-		index, ok := indexByRepoID[item.TrackedRepositoryID]
-		if !ok {
-			indexByRepoID[item.TrackedRepositoryID] = len(groups)
+		groupIndex, exists := groupIndexByRepositoryID[item.TrackedRepositoryID]
+		if !exists {
+			groupIndexByRepositoryID[item.TrackedRepositoryID] = len(groups)
 			groups = append(groups, confirmedSubscriptionGroup{
 				trackedRepositoryID: item.TrackedRepositoryID,
 				owner:               item.Owner,
 				name:                item.Name,
 				lastSeenTag:         item.LastSeenTag,
-				subscriptions:       []domain.ConfirmedRepositorySubscription{item},
+				subscriptions:       []readmodel.ConfirmedRepositorySubscription{item},
 			})
 			continue
 		}
 
-		groups[index].subscriptions = append(groups[index].subscriptions, item)
+		groups[groupIndex].subscriptions = append(groups[groupIndex].subscriptions, item)
 	}
 
 	return groups

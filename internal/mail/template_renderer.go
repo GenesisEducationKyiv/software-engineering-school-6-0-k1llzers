@@ -27,7 +27,6 @@ type ReleaseTemplateData struct {
 type RenderedEmail struct {
 	Subject  string
 	HTMLBody string
-	TextBody string
 }
 
 type TemplateRenderer struct {
@@ -69,7 +68,6 @@ func (r *TemplateRenderer) RenderConfirmationEmail(data ConfirmationTemplateData
 	return RenderedEmail{
 		Subject:  confirmationEmailSubject,
 		HTMLBody: htmlBody.String(),
-		TextBody: "Для підтвердження підписки на нові релізи репозиторію " + data.RepositoryFullName + " відкрийте посилання: " + data.ConfirmationURL + "\nДля скасування підписки відкрийте посилання: " + data.CancellationURL,
 	}, nil
 }
 
@@ -91,6 +89,5 @@ func (r *TemplateRenderer) RenderReleaseEmail(data ReleaseTemplateData) (Rendere
 	return RenderedEmail{
 		Subject:  subject,
 		HTMLBody: htmlBody.String(),
-		TextBody: "Для репозиторію " + data.RepositoryFullName + " вийшов новий реліз " + data.TagName + ": " + data.ReleaseURL + "\nДля скасування підписки відкрийте посилання: " + data.CancellationURL,
 	}, nil
 }

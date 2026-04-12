@@ -1,4 +1,4 @@
-package domain
+package readmodel
 
 type SubscriptionView struct {
 	Email       string

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 
 	"github-release-notifier/internal/config"
@@ -41,31 +42,22 @@ func main() {
 		log.Fatalf("create mail template renderer: %v", err)
 	}
 
-	sender := mail.Sender(mail.NewNoopSender())
-	if cfg.Mail.Host != "" && cfg.Mail.From != "" && cfg.Mail.ApiBaseUrl != "" {
-		sender = mail.NewSMTPSender(mail.SMTPConfig{
-			Host:     cfg.Mail.Host,
-			Port:     cfg.Mail.Port,
-			Username: cfg.Mail.Username,
-			Password: cfg.Mail.Password,
-			From:     cfg.Mail.From,
-		})
-	}
-
+	sender := newMailSender(cfg.Mail)
 	mailService := mail.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
-	mailDispatcher := mail.NewDispatcher(outboxStore, sender)
+	outboxDispatcher := mail.NewOutboxDispatcher(outboxStore, sender)
 
-	subscriptionService := service.NewSubscriptionServiceFromStorage(
+	subscriptionService := service.NewSubscriptionService(
 		transactionManager,
-		userStore,
-		trackedRepositoryStore,
+		func(tx *sql.Tx) service.UserStore { return userStore.WithTx(tx) },
+		func(tx *sql.Tx) service.TrackedRepositoryStore { return trackedRepositoryStore.WithTx(tx) },
 		subscriptionStore,
+		func(tx *sql.Tx) service.SubscriptionStore { return subscriptionStore.WithTx(tx) },
 		githubClient,
 		mailService,
 	)
-	releaseChecker := service.NewReleaseCheckerServiceFromStorage(
+	releaseMonitor := service.NewReleaseMonitor(
 		transactionManager,
-		trackedRepositoryStore,
+		func(tx *sql.Tx) service.TrackedRepositoryStore { return trackedRepositoryStore.WithTx(tx) },
 		subscriptionStore,
 		githubClient,
 		mailService,
@@ -73,10 +65,24 @@ func main() {
 
 	router := httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService))
 
-	go mailDispatcher.Run(appCtx)
-	go releaseChecker.Run(appCtx)
+	go outboxDispatcher.Run(appCtx)
+	go releaseMonitor.Run(appCtx)
 
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("run http server: %v", err)
 	}
+}
+
+func newMailSender(cfg config.MailConfig) mail.Sender {
+	if cfg.Host == "" || cfg.From == "" || cfg.ApiBaseUrl == "" {
+		return mail.NewNoopSender()
+	}
+
+	return mail.NewSMTPSender(mail.SMTPConfig{
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Username: cfg.Username,
+		Password: cfg.Password,
+		From:     cfg.From,
+	})
 }

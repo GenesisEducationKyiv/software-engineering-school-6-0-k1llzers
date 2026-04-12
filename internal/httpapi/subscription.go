@@ -7,6 +7,7 @@ import (
 	"net/mail"
 
 	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/readmodel"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -16,7 +17,7 @@ type subscriptionService interface {
 	Subscribe(ctx context.Context, email string, repositoryFullName string) error
 	ConfirmSubscription(ctx context.Context, token string) error
 	CancelSubscription(ctx context.Context, token string) error
-	ListSubscriptions(ctx context.Context, email string) ([]domain.SubscriptionView, error)
+	ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
 }
 
 type SubscriptionHandler struct {

@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/outbox"
 )
 
 type OutboxStore struct {
@@ -20,17 +21,17 @@ func (s *OutboxStore) WithTx(tx *sql.Tx) *OutboxStore {
 	return &OutboxStore{executor: tx}
 }
 
-func (s *OutboxStore) Create(ctx context.Context, recipientEmail string, email domain.OutboxEmail) error {
+func (s *OutboxStore) Create(ctx context.Context, recipientEmail string, email outbox.Email) error {
 	query := `
-		insert into mail_outbox (recipient_email, subject, html_body, text_body)
-		values ($1, $2, $3, $4);
+		insert into mail_outbox (recipient_email, subject, html_body)
+		values ($1, $2, $3);
 	`
 
-	_, err := s.executor.ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody, email.TextBody)
+	_, err := s.executor.ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
 	return err
 }
 
-func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (domain.OutboxEmail, error) {
+func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (outbox.Email, error) {
 	query := `
 		with candidate as (
 			select id
@@ -50,16 +51,15 @@ func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSec
 			updated_at = now()
 		from candidate
 		where o.id = candidate.id
-		returning o.id, o.recipient_email, o.subject, o.html_body, o.text_body, o.attempts, o.processing_started_at, o.sent_at, o.last_error, o.created_at, o.updated_at;
+		returning o.id, o.recipient_email, o.subject, o.html_body, o.attempts, o.processing_started_at, o.sent_at, o.last_error, o.created_at, o.updated_at;
 	`
 
-	var result domain.OutboxEmail
+	var result outbox.Email
 	err := s.executor.QueryRowContext(ctx, query, processingTimeoutSeconds).Scan(
 		&result.ID,
 		&result.RecipientEmail,
 		&result.Subject,
 		&result.HTMLBody,
-		&result.TextBody,
 		&result.Attempts,
 		&result.ProcessingStartedAt,
 		&result.SentAt,
@@ -69,10 +69,10 @@ func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSec
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.OutboxEmail{}, domain.ErrNotFound
+			return outbox.Email{}, domain.ErrNotFound
 		}
 
-		return domain.OutboxEmail{}, err
+		return outbox.Email{}, err
 	}
 
 	return result, nil

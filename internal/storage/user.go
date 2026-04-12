@@ -7,6 +7,11 @@ import (
 	"github-release-notifier/internal/domain"
 )
 
+type UserRepository interface {
+	CreateIfNotExists(ctx context.Context, email string) (domain.User, error)
+	WithTx(tx *sql.Tx) *UserStore
+}
+
 type UserStore struct {
 	executor executor
 }

@@ -1,4 +1,4 @@
-package domain
+package readmodel
 
 import "github.com/google/uuid"
 

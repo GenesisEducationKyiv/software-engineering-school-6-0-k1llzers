@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/readmodel"
@@ -205,6 +206,42 @@ func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 	require.Contains(t, err.Error(), "labstack/echo")
 }
 
+func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
+	subscriptions := &subscriptionCreatorStub{
+		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+			{
+				TrackedRepositoryID: 10,
+				Owner:               "gin-gonic",
+				Name:                "gin",
+				LastSeenTag:         "v1.10.0",
+				Email:               "first@example.com",
+				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			},
+			{
+				TrackedRepositoryID: 20,
+				Owner:               "labstack",
+				Name:                "echo",
+				LastSeenTag:         "v4.13.3",
+				Email:               "second@example.com",
+				CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			},
+		},
+	}
+	gitRepositories := &gitRepositoryProviderStub{releaseErr: domain.ErrRateLimited}
+	service := NewReleaseMonitor(
+		&transactionManagerStub{},
+		&trackedRepositoryProviderStub{},
+		subscriptions,
+		gitRepositories,
+		&notificationQueueFactoryStub{},
+	)
+
+	err := service.CheckOnce(context.Background())
+	require.ErrorIs(t, err, domain.ErrRateLimited)
+	require.Equal(t, 1, gitRepositories.calls)
+	require.Contains(t, err.Error(), "gin-gonic/gin")
+}
+
 func TestReleaseMonitor_CheckOnce_UsesReleaseHTMLURLWhenPresent(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{}
@@ -316,6 +353,13 @@ func TestBuildReleaseURL(t *testing.T) {
 		"https://github.com/gin-gonic/gin/releases/tag/v1.11.0",
 		buildReleaseURL("gin-gonic", "gin", "v1.11.0", ""),
 	)
+}
+
+func TestSleepContext_ReturnsFalseWhenContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	require.False(t, sleepContext(ctx, time.Second))
 }
 
 type releaseCall struct {

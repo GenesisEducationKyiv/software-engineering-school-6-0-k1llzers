@@ -13,7 +13,10 @@ import (
 	"github-release-notifier/internal/readmodel"
 )
 
-const defaultReleaseCheckInterval = time.Minute
+const (
+	defaultReleaseCheckInterval = time.Minute
+	defaultRateLimitBackoff     = 15 * time.Minute
+)
 
 type ReleaseMonitor struct {
 	txManager     txManager
@@ -45,7 +48,14 @@ func (m *ReleaseMonitor) Run(ctx context.Context) {
 
 	for {
 		if err := m.CheckOnce(ctx); err != nil && ctx.Err() == nil {
-			log.Printf("release monitor failed: %v", err)
+			if errors.Is(err, domain.ErrRateLimited) {
+				log.Printf("release monitor hit github rate limit, pausing for %s: %v", defaultRateLimitBackoff, err)
+				if !sleepContext(ctx, defaultRateLimitBackoff) {
+					return
+				}
+			} else {
+				log.Printf("release monitor failed: %v", err)
+			}
 		}
 
 		select {
@@ -70,6 +80,9 @@ func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
 		if err != nil {
 			if errors.Is(err, domain.ErrNoReleases) {
 				continue
+			}
+			if errors.Is(err, domain.ErrRateLimited) {
+				return fmt.Errorf("%s/%s: %w", group.owner, group.name, err)
 			}
 
 			checkErrors = append(checkErrors, fmt.Errorf("%s/%s: %w", group.owner, group.name, err))
@@ -137,4 +150,16 @@ func buildReleaseURL(owner string, repo string, tagName string, releaseHTMLURL s
 	}
 
 	return fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", owner, repo, tagName)
+}
+
+func sleepContext(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }

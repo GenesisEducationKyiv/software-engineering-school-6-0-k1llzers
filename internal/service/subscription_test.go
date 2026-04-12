@@ -61,6 +61,7 @@ type gitRepositoryProviderStub struct {
 	existsErr  error
 	owner      string
 	repoName   string
+	calls      int
 }
 
 func (s *gitRepositoryProviderStub) RepositoryExists(_ context.Context, owner string, repoName string) error {
@@ -70,6 +71,7 @@ func (s *gitRepositoryProviderStub) RepositoryExists(_ context.Context, owner st
 }
 
 func (s *gitRepositoryProviderStub) GetLatestRelease(_ context.Context, owner string, repoName string) (domain.Release, error) {
+	s.calls++
 	s.owner = owner
 	s.repoName = repoName
 	if s.releaseErr != nil {

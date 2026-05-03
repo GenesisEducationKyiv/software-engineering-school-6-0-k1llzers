@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - "**"
   pull_request:
 
 permissions:
@@ -24,9 +21,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Show Docker version
-        run: docker version
 
       - name: Run tests
         run: go test ./...

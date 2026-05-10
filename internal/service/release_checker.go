@@ -20,18 +20,30 @@ const (
 
 type ReleaseMonitor struct {
 	txManager     txManager
-	repositories  TrackedRepositoryStore
-	subscriptions SubscriptionStore
-	repositoryAPI githubRepositoryClient
-	mailQueue     mail.Queue
+	repositories  trackedRepositoryTagUpdater
+	subscriptions confirmedSubscriptionReader
+	repositoryAPI latestReleaseReader
+	mailQueue     mail.ReleaseNotificationQueue
+}
+
+type trackedRepositoryTagUpdater interface {
+	UpdateLastSeenTag(ctx context.Context, tx *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error
+}
+
+type confirmedSubscriptionReader interface {
+	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error)
+}
+
+type latestReleaseReader interface {
+	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
 func NewReleaseMonitor(
 	txManager txManager,
-	repositories TrackedRepositoryStore,
-	subscriptions SubscriptionStore,
-	repositoryAPI githubRepositoryClient,
-	mailQueue mail.Queue,
+	repositories trackedRepositoryTagUpdater,
+	subscriptions confirmedSubscriptionReader,
+	repositoryAPI latestReleaseReader,
+	mailQueue mail.ReleaseNotificationQueue,
 ) *ReleaseMonitor {
 	return &ReleaseMonitor{
 		txManager:     txManager,

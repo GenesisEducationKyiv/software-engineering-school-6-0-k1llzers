@@ -17,9 +17,8 @@ type UserStore interface {
 	CreateIfNotExists(ctx context.Context, tx *sql.Tx, email string) (domain.User, error)
 }
 
-type TrackedRepositoryStore interface {
+type trackedRepositoryCreator interface {
 	CreateIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
-	UpdateLastSeenTag(ctx context.Context, tx *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error
 }
 
 type SubscriptionStore interface {
@@ -27,30 +26,24 @@ type SubscriptionStore interface {
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
 	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
-	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error)
-}
-
-type githubRepositoryClient interface {
-	RepositoryExists(ctx context.Context, owner string, repoName string) error
-	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
 type SubscriptionService struct {
 	txManager     txManager
 	users         UserStore
-	repositories  TrackedRepositoryStore
+	repositories  trackedRepositoryCreator
 	subscriptions SubscriptionStore
 	repositoryAPI githubRepositoryClient
-	mailQueue     mail.Queue
+	mailQueue     mail.ConfirmationQueue
 }
 
 func NewSubscriptionService(
 	txManager txManager,
 	users UserStore,
-	repositories TrackedRepositoryStore,
+	repositories trackedRepositoryCreator,
 	subscriptions SubscriptionStore,
 	repositoryAPI githubRepositoryClient,
-	mailQueue mail.Queue,
+	mailQueue mail.ConfirmationQueue,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		txManager:     txManager,

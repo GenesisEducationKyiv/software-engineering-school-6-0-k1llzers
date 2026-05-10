@@ -8,6 +8,11 @@ import (
 	"github-release-notifier/internal/domain"
 )
 
+type githubRepositoryClient interface {
+	RepositoryExists(ctx context.Context, owner string, repoName string) error
+	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
+}
+
 type subscriptionRepository struct {
 	owner       string
 	name        string

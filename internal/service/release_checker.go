@@ -76,36 +76,12 @@ func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
 	var checkErrors []error
 
 	for _, group := range groupedSubscriptions {
-		release, err := m.repositoryAPI.GetLatestRelease(ctx, group.owner, group.name)
+		err := m.processRepositoryRelease(ctx, group)
 		if err != nil {
-			if errors.Is(err, domain.ErrNoReleases) {
-				continue
-			}
 			if errors.Is(err, domain.ErrRateLimited) {
-				return fmt.Errorf("%s/%s: %w", group.owner, group.name, err)
+				return err
 			}
-
-			checkErrors = append(checkErrors, fmt.Errorf("%s/%s: %w", group.owner, group.name, err))
-			continue
-		}
-
-		if release.TagName == "" || release.TagName == group.lastSeenTag {
-			continue
-		}
-
-		releaseURL := buildReleaseURL(group.owner, group.name, release.TagName, release.HTMLURL)
-		err = m.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
-			for _, subscription := range group.subscriptions {
-				repositoryFullName := subscription.Owner + "/" + subscription.Name
-				if err := m.mailQueue.QueueReleaseNotification(ctx, tx, subscription.Email, repositoryFullName, release.TagName, releaseURL, subscription.CancellationToken); err != nil {
-					return err
-				}
-			}
-
-			return m.repositories.UpdateLastSeenTag(ctx, tx, group.trackedRepositoryID, release.TagName)
-		})
-		if err != nil {
-			checkErrors = append(checkErrors, fmt.Errorf("%s/%s enqueue: %w", group.owner, group.name, err))
+			checkErrors = append(checkErrors, err)
 		}
 	}
 
@@ -118,6 +94,53 @@ type confirmedSubscriptionGroup struct {
 	name                string
 	lastSeenTag         string
 	subscriptions       []readmodel.ConfirmedRepositorySubscription
+}
+
+func (g confirmedSubscriptionGroup) fullName() string {
+	return g.owner + "/" + g.name
+}
+
+func (m *ReleaseMonitor) processRepositoryRelease(ctx context.Context, group confirmedSubscriptionGroup) error {
+	release, err := m.repositoryAPI.GetLatestRelease(ctx, group.owner, group.name)
+	if err != nil {
+		return mapLatestReleaseError(group, err)
+	}
+
+	if !group.shouldNotify(release.TagName) {
+		return nil
+	}
+
+	if err := m.queueReleaseNotifications(ctx, group, release); err != nil {
+		return fmt.Errorf("%s enqueue: %w", group.fullName(), err)
+	}
+
+	return nil
+}
+
+func mapLatestReleaseError(group confirmedSubscriptionGroup, err error) error {
+	if errors.Is(err, domain.ErrNoReleases) {
+		return nil
+	}
+
+	return fmt.Errorf("%s: %w", group.fullName(), err)
+}
+
+func (m *ReleaseMonitor) queueReleaseNotifications(ctx context.Context, group confirmedSubscriptionGroup, release domain.Release) error {
+	releaseURL := buildReleaseURL(group.owner, group.name, release.TagName, release.HTMLURL)
+
+	return m.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
+		for _, subscription := range group.subscriptions {
+			if err := m.mailQueue.QueueReleaseNotification(ctx, tx, subscription.Email, group.fullName(), release.TagName, releaseURL, subscription.CancellationToken); err != nil {
+				return err
+			}
+		}
+
+		return m.repositories.UpdateLastSeenTag(ctx, tx, group.trackedRepositoryID, release.TagName)
+	})
+}
+
+func (g confirmedSubscriptionGroup) shouldNotify(tagName string) bool {
+	return tagName != "" && tagName != g.lastSeenTag
 }
 
 func groupConfirmedSubscriptions(items []readmodel.ConfirmedRepositorySubscription) []confirmedSubscriptionGroup {

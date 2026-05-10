@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"strings"
 
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/mail"
@@ -65,23 +63,9 @@ func NewSubscriptionService(
 }
 
 func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repositoryFullName string) error {
-	owner, repoName, err := splitRepositoryFullName(repositoryFullName)
+	repository, err := s.prepareSubscription(ctx, repositoryFullName)
 	if err != nil {
 		return err
-	}
-
-	if err := s.repositoryAPI.RepositoryExists(ctx, owner, repoName); err != nil {
-		return err
-	}
-
-	release, err := s.repositoryAPI.GetLatestRelease(ctx, owner, repoName)
-	if err != nil && !errors.Is(err, domain.ErrNoReleases) {
-		return err
-	}
-
-	lastSeenTag := ""
-	if err == nil {
-		lastSeenTag = release.TagName
 	}
 
 	return s.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
@@ -90,12 +74,12 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 			return err
 		}
 
-		repository, err := s.repositories.CreateIfNotExists(ctx, tx, owner, repoName, lastSeenTag)
+		trackedRepository, err := s.repositories.CreateIfNotExists(ctx, tx, repository.owner, repository.name, repository.lastSeenTag)
 		if err != nil {
 			return err
 		}
 
-		subscription, err := s.subscriptions.Create(ctx, tx, user.ID, repository.ID)
+		subscription, err := s.subscriptions.Create(ctx, tx, user.ID, trackedRepository.ID)
 		if err != nil {
 			return err
 		}
@@ -114,13 +98,4 @@ func (s *SubscriptionService) CancelSubscription(ctx context.Context, token stri
 
 func (s *SubscriptionService) ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error) {
 	return s.subscriptions.ListByEmail(ctx, email)
-}
-
-func splitRepositoryFullName(repositoryFullName string) (string, string, error) {
-	parts := strings.Split(repositoryFullName, "/")
-
-	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-		return "", "", domain.ErrIncorrectRepositoryFormat
-	}
-	return parts[0], parts[1], nil
 }

@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	token      string
-	userAgent  string
+	api        apiContract
 }
 
 type latestReleaseResponse struct {
@@ -42,12 +41,12 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client, token string)
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 		token:      token,
-		userAgent:  "github-release-notifier",
+		api:        newDefaultAPIContract(),
 	}
 }
 
 func (c *Client) RepositoryExists(ctx context.Context, owner string, repoName string) error {
-	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/%s", c.baseURL, owner, repoName))
+	resp, err := c.doRequest(ctx, http.MethodGet, c.api.repositoryExistsURL(c.baseURL, owner, repoName))
 	if err != nil {
 		return err
 	}
@@ -55,20 +54,11 @@ func (c *Client) RepositoryExists(ctx context.Context, owner string, repoName st
 		_ = resp.Body.Close()
 	}()
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return nil
-	case http.StatusNotFound:
-		return domain.ErrNotFound
-	case http.StatusTooManyRequests, http.StatusForbidden:
-		return domain.ErrRateLimited
-	default:
-		return fmt.Errorf("github repository request failed: status %d", resp.StatusCode)
-	}
+	return c.api.mapRepositoryExistsStatus(resp.StatusCode)
 }
 
 func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error) {
-	resp, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf("%s/repos/%s/%s/releases/latest", c.baseURL, owner, repoName))
+	resp, err := c.doRequest(ctx, http.MethodGet, c.api.latestReleaseURL(c.baseURL, owner, repoName))
 	if err != nil {
 		return domain.Release{}, err
 	}
@@ -76,16 +66,8 @@ func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName st
 		_ = resp.Body.Close()
 	}()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return domain.Release{}, domain.ErrNoReleases
-	}
-
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
-		return domain.Release{}, domain.ErrRateLimited
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return domain.Release{}, fmt.Errorf("github latest release request failed: status %d", resp.StatusCode)
+	if err := c.api.mapLatestReleaseStatus(resp.StatusCode); err != nil {
+		return domain.Release{}, err
 	}
 
 	var payload latestReleaseResponse
@@ -109,12 +91,7 @@ func (c *Client) doRequest(ctx context.Context, method string, endpoint string) 
 		return nil, err
 	}
 
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
-	req.Header.Set("User-Agent", c.userAgent)
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
+	c.api.applyHeaders(req, c.token)
 
 	return c.httpClient.Do(req)
 }

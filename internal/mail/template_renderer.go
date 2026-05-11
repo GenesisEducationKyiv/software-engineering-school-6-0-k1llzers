@@ -3,10 +3,16 @@ package mail
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"html/template"
 )
 
 const confirmationEmailSubject = "Confirm your GitHub release subscription"
+
+const (
+	templateKindConfirmation = "confirmation"
+	templateKindRelease      = "release"
+)
 
 //go:embed templates/*.tmpl
 var templateFS embed.FS
@@ -29,65 +35,97 @@ type RenderedEmail struct {
 	HTMLBody string
 }
 
+type renderFunc func(data any) (RenderedEmail, error)
+
+type templateSpec struct {
+	path   string
+	render func(tmpl *template.Template, data any) (RenderedEmail, error)
+}
+
 type TemplateRenderer struct {
-	confirmationEmail *template.Template
-	releaseEmail      *template.Template
+	renderers map[string]renderFunc
 }
 
 func NewTemplateRenderer() (*TemplateRenderer, error) {
-	confirmationEmail, err := template.ParseFS(templateFS, "templates/confirmation_email.html.tmpl")
-	if err != nil {
-		return nil, err
+	specs := map[string]templateSpec{
+		templateKindConfirmation: newTemplateSpec(
+			templateKindConfirmation,
+			"templates/confirmation_email.html.tmpl",
+			func(data ConfirmationTemplateData) (string, any) {
+				return confirmationEmailSubject, struct {
+					Subject string
+					ConfirmationTemplateData
+				}{
+					Subject:                  confirmationEmailSubject,
+					ConfirmationTemplateData: data,
+				}
+			},
+		),
+		templateKindRelease: newTemplateSpec(
+			templateKindRelease,
+			"templates/release_email.html.tmpl",
+			func(data ReleaseTemplateData) (string, any) {
+				subject := "New release for " + data.RepositoryFullName + ": " + data.TagName
+				return subject, struct {
+					Subject string
+					ReleaseTemplateData
+				}{
+					Subject:             subject,
+					ReleaseTemplateData: data,
+				}
+			},
+		),
 	}
 
-	releaseEmail, err := template.ParseFS(templateFS, "templates/release_email.html.tmpl")
-	if err != nil {
-		return nil, err
+	renderer := &TemplateRenderer{
+		renderers: make(map[string]renderFunc),
 	}
 
-	return &TemplateRenderer{
-		confirmationEmail: confirmationEmail,
-		releaseEmail:      releaseEmail,
-	}, nil
+	for kind, spec := range specs {
+		tmpl, err := template.ParseFS(templateFS, spec.path)
+		if err != nil {
+			return nil, err
+		}
+
+		kind := kind
+		spec := spec
+		renderer.renderers[kind] = func(data any) (RenderedEmail, error) {
+			return spec.render(tmpl, data)
+		}
+	}
+
+	return renderer, nil
 }
 
-func (r *TemplateRenderer) RenderConfirmationEmail(data ConfirmationTemplateData) (RenderedEmail, error) {
-	payload := struct {
-		Subject string
-		ConfirmationTemplateData
-	}{
-		Subject:                  confirmationEmailSubject,
-		ConfirmationTemplateData: data,
+func (r *TemplateRenderer) Render(kind string, data any) (RenderedEmail, error) {
+	render, ok := r.renderers[kind]
+	if !ok {
+		return RenderedEmail{}, fmt.Errorf("unknown template kind: %s", kind)
 	}
 
-	var htmlBody bytes.Buffer
-	if err := r.confirmationEmail.Execute(&htmlBody, payload); err != nil {
-		return RenderedEmail{}, err
-	}
-
-	return RenderedEmail{
-		Subject:  confirmationEmailSubject,
-		HTMLBody: htmlBody.String(),
-	}, nil
+	return render(data)
 }
 
-func (r *TemplateRenderer) RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error) {
-	subject := "New release for " + data.RepositoryFullName + ": " + data.TagName
-	payload := struct {
-		Subject string
-		ReleaseTemplateData
-	}{
-		Subject:             subject,
-		ReleaseTemplateData: data,
-	}
+func newTemplateSpec[T any](kind string, path string, buildView func(T) (string, any)) templateSpec {
+	return templateSpec{
+		path: path,
+		render: func(tmpl *template.Template, data any) (RenderedEmail, error) {
+			payload, ok := data.(T)
+			if !ok {
+				return RenderedEmail{}, fmt.Errorf("invalid data for %s template", kind)
+			}
 
-	var htmlBody bytes.Buffer
-	if err := r.releaseEmail.Execute(&htmlBody, payload); err != nil {
-		return RenderedEmail{}, err
-	}
+			subject, templatePayload := buildView(payload)
 
-	return RenderedEmail{
-		Subject:  subject,
-		HTMLBody: htmlBody.String(),
-	}, nil
+			var htmlBody bytes.Buffer
+			if err := tmpl.Execute(&htmlBody, templatePayload); err != nil {
+				return RenderedEmail{}, err
+			}
+
+			return RenderedEmail{
+				Subject:  subject,
+				HTMLBody: htmlBody.String(),
+			}, nil
+		},
+	}
 }

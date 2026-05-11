@@ -11,8 +11,7 @@ import (
 )
 
 type renderer interface {
-	RenderConfirmationEmail(data ConfirmationTemplateData) (RenderedEmail, error)
-	RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error)
+	Render(kind string, data any) (RenderedEmail, error)
 }
 
 type outboxWriter interface {
@@ -42,30 +41,29 @@ func NewService(renderer renderer, outbox outboxWriter, apiBaseURL string) *Serv
 }
 
 func (s *Service) QueueSubscriptionConfirmation(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
-	email, err := s.renderer.RenderConfirmationEmail(ConfirmationTemplateData{
+	return s.queueTemplate(ctx, tx, recipientEmail, templateKindConfirmation, ConfirmationTemplateData{
 		RepositoryFullName: repositoryFullName,
 		ConfirmationURL:    s.urls.confirmationURL(confirmationToken),
 		CancellationURL:    s.urls.cancellationURL(cancellationToken),
 	})
-	if err != nil {
-		return fmt.Errorf("render confirmation email: %w", err)
-	}
-
-	return s.enqueue(ctx, tx, recipientEmail, email, "confirmation")
 }
 
 func (s *Service) QueueReleaseNotification(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
-	email, err := s.renderer.RenderReleaseEmail(ReleaseTemplateData{
+	return s.queueTemplate(ctx, tx, recipientEmail, templateKindRelease, ReleaseTemplateData{
 		RepositoryFullName: repositoryFullName,
 		TagName:            tagName,
 		ReleaseURL:         releaseURL,
 		CancellationURL:    s.urls.cancellationURL(cancellationToken),
 	})
+}
+
+func (s *Service) queueTemplate(ctx context.Context, tx *sql.Tx, recipientEmail string, kind string, data any) error {
+	email, err := s.renderer.Render(kind, data)
 	if err != nil {
-		return fmt.Errorf("render release email: %w", err)
+		return fmt.Errorf("render %s email: %w", kind, err)
 	}
 
-	return s.enqueue(ctx, tx, recipientEmail, email, "release")
+	return s.enqueue(ctx, tx, recipientEmail, email, kind)
 }
 
 func (s *Service) enqueue(ctx context.Context, tx *sql.Tx, recipientEmail string, email RenderedEmail, kind string) error {

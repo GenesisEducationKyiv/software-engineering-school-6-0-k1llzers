@@ -13,30 +13,22 @@ import (
 )
 
 type rendererStub struct {
-	confirmationEmail RenderedEmail
-	releaseEmail      RenderedEmail
-	confirmationData  ConfirmationTemplateData
-	releaseData       ReleaseTemplateData
-	confirmationErr   error
-	releaseErr        error
+	emails map[string]RenderedEmail
+	data   map[string]any
+	errs   map[string]error
 }
 
-func (s *rendererStub) RenderConfirmationEmail(data ConfirmationTemplateData) (RenderedEmail, error) {
-	s.confirmationData = data
-	if s.confirmationErr != nil {
-		return RenderedEmail{}, s.confirmationErr
+func (s *rendererStub) Render(kind string, data any) (RenderedEmail, error) {
+	if s.data == nil {
+		s.data = make(map[string]any)
+	}
+	s.data[kind] = data
+
+	if err := s.errs[kind]; err != nil {
+		return RenderedEmail{}, err
 	}
 
-	return s.confirmationEmail, nil
-}
-
-func (s *rendererStub) RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error) {
-	s.releaseData = data
-	if s.releaseErr != nil {
-		return RenderedEmail{}, s.releaseErr
-	}
-
-	return s.releaseEmail, nil
+	return s.emails[kind], nil
 }
 
 type outboxWriterStub struct {
@@ -55,9 +47,11 @@ func (s *outboxWriterStub) Create(_ context.Context, _ *sql.Tx, recipientEmail s
 
 func TestService_QueueSubscriptionConfirmation(t *testing.T) {
 	renderer := &rendererStub{
-		confirmationEmail: RenderedEmail{
-			Subject:  "Confirm subscription",
-			HTMLBody: "<p>body</p>",
+		emails: map[string]RenderedEmail{
+			templateKindConfirmation: {
+				Subject:  "Confirm subscription",
+				HTMLBody: "<p>body</p>",
+			},
 		},
 	}
 	outboxStore := &outboxWriterStub{}
@@ -76,14 +70,15 @@ func TestService_QueueSubscriptionConfirmation(t *testing.T) {
 	require.True(t, outboxStore.called)
 	require.Equal(t, "user@example.com", outboxStore.recipientEmail)
 	require.Equal(t, outbox.Email{Subject: "Confirm subscription", HTMLBody: "<p>body</p>"}, outboxStore.email)
-	require.Equal(t, "gin-gonic/gin", renderer.confirmationData.RepositoryFullName)
-	require.Equal(t, "http://localhost:8080/api/confirm/11111111-1111-1111-1111-111111111111", renderer.confirmationData.ConfirmationURL)
-	require.Equal(t, "http://localhost:8080/api/unsubscribe/22222222-2222-2222-2222-222222222222", renderer.confirmationData.CancellationURL)
+	confirmationData := renderer.data[templateKindConfirmation].(ConfirmationTemplateData)
+	require.Equal(t, "gin-gonic/gin", confirmationData.RepositoryFullName)
+	require.Equal(t, "http://localhost:8080/api/confirm/11111111-1111-1111-1111-111111111111", confirmationData.ConfirmationURL)
+	require.Equal(t, "http://localhost:8080/api/unsubscribe/22222222-2222-2222-2222-222222222222", confirmationData.CancellationURL)
 }
 
 func TestService_QueueSubscriptionConfirmation_ReturnsRendererError(t *testing.T) {
 	expectedErr := errors.New("render failed")
-	service := NewService(&rendererStub{confirmationErr: expectedErr}, &outboxWriterStub{}, "http://localhost:8080/api")
+	service := NewService(&rendererStub{errs: map[string]error{templateKindConfirmation: expectedErr}}, &outboxWriterStub{}, "http://localhost:8080/api")
 
 	err := service.QueueSubscriptionConfirmation(
 		context.Background(),
@@ -101,7 +96,7 @@ func TestService_QueueSubscriptionConfirmation_ReturnsRendererError(t *testing.T
 func TestService_QueueSubscriptionConfirmation_ReturnsOutboxError(t *testing.T) {
 	expectedErr := errors.New("enqueue failed")
 	service := NewService(
-		&rendererStub{confirmationEmail: RenderedEmail{Subject: "subject", HTMLBody: "body"}},
+		&rendererStub{emails: map[string]RenderedEmail{templateKindConfirmation: {Subject: "subject", HTMLBody: "body"}}},
 		&outboxWriterStub{err: expectedErr},
 		"http://localhost:8080/api",
 	)
@@ -121,9 +116,11 @@ func TestService_QueueSubscriptionConfirmation_ReturnsOutboxError(t *testing.T) 
 
 func TestService_QueueReleaseNotification(t *testing.T) {
 	renderer := &rendererStub{
-		releaseEmail: RenderedEmail{
-			Subject:  "New release",
-			HTMLBody: "<p>release</p>",
+		emails: map[string]RenderedEmail{
+			templateKindRelease: {
+				Subject:  "New release",
+				HTMLBody: "<p>release</p>",
+			},
 		},
 	}
 	outboxStore := &outboxWriterStub{}
@@ -142,15 +139,16 @@ func TestService_QueueReleaseNotification(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, outboxStore.called)
 	require.Equal(t, outbox.Email{Subject: "New release", HTMLBody: "<p>release</p>"}, outboxStore.email)
-	require.Equal(t, "gin-gonic/gin", renderer.releaseData.RepositoryFullName)
-	require.Equal(t, "v1.11.0", renderer.releaseData.TagName)
-	require.Equal(t, "https://github.com/gin-gonic/gin/releases/tag/v1.11.0", renderer.releaseData.ReleaseURL)
-	require.Equal(t, "http://localhost:8080/api/unsubscribe/22222222-2222-2222-2222-222222222222", renderer.releaseData.CancellationURL)
+	releaseData := renderer.data[templateKindRelease].(ReleaseTemplateData)
+	require.Equal(t, "gin-gonic/gin", releaseData.RepositoryFullName)
+	require.Equal(t, "v1.11.0", releaseData.TagName)
+	require.Equal(t, "https://github.com/gin-gonic/gin/releases/tag/v1.11.0", releaseData.ReleaseURL)
+	require.Equal(t, "http://localhost:8080/api/unsubscribe/22222222-2222-2222-2222-222222222222", releaseData.CancellationURL)
 }
 
 func TestService_QueueReleaseNotification_ReturnsRendererError(t *testing.T) {
 	expectedErr := errors.New("render failed")
-	service := NewService(&rendererStub{releaseErr: expectedErr}, &outboxWriterStub{}, "http://localhost:8080/api")
+	service := NewService(&rendererStub{errs: map[string]error{templateKindRelease: expectedErr}}, &outboxWriterStub{}, "http://localhost:8080/api")
 
 	err := service.QueueReleaseNotification(
 		context.Background(),
@@ -169,7 +167,7 @@ func TestService_QueueReleaseNotification_ReturnsRendererError(t *testing.T) {
 func TestService_QueueReleaseNotification_ReturnsOutboxError(t *testing.T) {
 	expectedErr := errors.New("enqueue failed")
 	service := NewService(
-		&rendererStub{releaseEmail: RenderedEmail{Subject: "subject", HTMLBody: "body"}},
+		&rendererStub{emails: map[string]RenderedEmail{templateKindRelease: {Subject: "subject", HTMLBody: "body"}}},
 		&outboxWriterStub{err: expectedErr},
 		"http://localhost:8080/api",
 	)

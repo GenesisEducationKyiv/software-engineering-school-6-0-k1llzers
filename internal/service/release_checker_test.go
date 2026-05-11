@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -376,12 +375,12 @@ type notificationQueueFactoryStub struct {
 	confirmations int
 }
 
-func (s *notificationQueueFactoryStub) QueueSubscriptionConfirmation(_ context.Context, _ *sql.Tx, _ string, _ string, _ uuid.UUID, _ uuid.UUID) error {
+func (s *notificationQueueFactoryStub) QueueSubscriptionConfirmation(_ context.Context, _ string, _ string, _ uuid.UUID, _ uuid.UUID) error {
 	s.confirmations++
 	return s.queueErr
 }
 
-func (s *notificationQueueFactoryStub) QueueReleaseNotification(_ context.Context, _ *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
+func (s *notificationQueueFactoryStub) QueueReleaseNotification(_ context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
 	if s.queueErr != nil {
 		return s.queueErr
 	}

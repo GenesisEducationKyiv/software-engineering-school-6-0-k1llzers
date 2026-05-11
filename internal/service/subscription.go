@@ -2,30 +2,34 @@ package service
 
 import (
 	"context"
-	"database/sql"
 
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/mail"
 	"github-release-notifier/internal/readmodel"
+
+	"github.com/google/uuid"
 )
 
 type txManager interface {
-	WithinTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error
+	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 type UserStore interface {
-	CreateIfNotExists(ctx context.Context, tx *sql.Tx, email string) (domain.User, error)
+	CreateIfNotExists(ctx context.Context, email string) (domain.User, error)
 }
 
 type trackedRepositoryCreator interface {
-	CreateIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
+	CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
 }
 
 type SubscriptionStore interface {
-	Create(ctx context.Context, tx *sql.Tx, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
+	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
 	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
+}
+
+type ConfirmationQueue interface {
+	QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
 }
 
 type SubscriptionService struct {
@@ -34,7 +38,7 @@ type SubscriptionService struct {
 	repositories  trackedRepositoryCreator
 	subscriptions SubscriptionStore
 	repositoryAPI githubRepositoryClient
-	mailQueue     mail.ConfirmationQueue
+	mailQueue     ConfirmationQueue
 }
 
 func NewSubscriptionService(
@@ -43,7 +47,7 @@ func NewSubscriptionService(
 	repositories trackedRepositoryCreator,
 	subscriptions SubscriptionStore,
 	repositoryAPI githubRepositoryClient,
-	mailQueue mail.ConfirmationQueue,
+	mailQueue ConfirmationQueue,
 ) *SubscriptionService {
 	return &SubscriptionService{
 		txManager:     txManager,
@@ -61,23 +65,23 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 		return err
 	}
 
-	return s.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
-		user, err := s.users.CreateIfNotExists(ctx, tx, email)
+	return s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		user, err := s.users.CreateIfNotExists(ctx, email)
 		if err != nil {
 			return err
 		}
 
-		trackedRepository, err := s.repositories.CreateIfNotExists(ctx, tx, repository.owner, repository.name, repository.lastSeenTag)
+		trackedRepository, err := s.repositories.CreateIfNotExists(ctx, repository.owner, repository.name, repository.lastSeenTag)
 		if err != nil {
 			return err
 		}
 
-		subscription, err := s.subscriptions.Create(ctx, tx, user.ID, trackedRepository.ID)
+		subscription, err := s.subscriptions.Create(ctx, user.ID, trackedRepository.ID)
 		if err != nil {
 			return err
 		}
 
-		return s.mailQueue.QueueSubscriptionConfirmation(ctx, tx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken)
+		return s.mailQueue.QueueSubscriptionConfirmation(ctx, email, repositoryFullName, subscription.ConfirmationToken, subscription.CancellationToken)
 	})
 }
 

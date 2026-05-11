@@ -15,7 +15,7 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-func (s *UserStore) CreateIfNotExists(ctx context.Context, tx *sql.Tx, email string) (domain.User, error) {
+func (s *UserStore) CreateIfNotExists(ctx context.Context, email string) (domain.User, error) {
 	query := `
 		insert into users (email)
 		values ($1)
@@ -26,7 +26,7 @@ func (s *UserStore) CreateIfNotExists(ctx context.Context, tx *sql.Tx, email str
 
 	var result domain.User
 
-	err := newQueryExecutor(s.db, tx).QueryRowContext(ctx, query, email).Scan(
+	err := newQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, email).Scan(
 		&result.ID,
 		&result.Email,
 		&result.CreatedAt,

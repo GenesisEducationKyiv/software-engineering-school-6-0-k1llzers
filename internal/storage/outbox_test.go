@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	dbtx "github-release-notifier/internal/db"
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/outbox"
 
@@ -15,7 +16,7 @@ func TestOutboxStore_CreateClaimAndMarkSent(t *testing.T) {
 	store := NewOutboxStore(db)
 
 	ctx := context.Background()
-	err := store.Create(ctx, nil, "test@example.com", outbox.Email{
+	err := store.Create(ctx, "test@example.com", outbox.Email{
 		Subject:  "subject",
 		HTMLBody: "<b>hello</b>",
 	})
@@ -39,7 +40,7 @@ func TestOutboxStore_Release_MakesMessageAvailableAgain(t *testing.T) {
 	store := NewOutboxStore(db)
 
 	ctx := context.Background()
-	err := store.Create(ctx, nil, "test@example.com", outbox.Email{
+	err := store.Create(ctx, "test@example.com", outbox.Email{
 		Subject:  "subject",
 		HTMLBody: "<b>hello</b>",
 	})
@@ -64,9 +65,9 @@ func TestOutboxStore_ClaimNextPending_ReturnsOldestPendingMessage(t *testing.T) 
 	store := NewOutboxStore(db)
 
 	ctx := context.Background()
-	err := store.Create(ctx, nil, "first@example.com", outbox.Email{Subject: "first", HTMLBody: "1"})
+	err := store.Create(ctx, "first@example.com", outbox.Email{Subject: "first", HTMLBody: "1"})
 	require.NoError(t, err)
-	err = store.Create(ctx, nil, "second@example.com", outbox.Email{Subject: "second", HTMLBody: "2"})
+	err = store.Create(ctx, "second@example.com", outbox.Email{Subject: "second", HTMLBody: "2"})
 	require.NoError(t, err)
 
 	first, err := store.ClaimNextPending(ctx, 60)
@@ -84,7 +85,7 @@ func TestOutboxStore_Create_UsesTransaction(t *testing.T) {
 	store := NewOutboxStore(db)
 
 	tx := beginTestTx(t, db)
-	err := store.Create(context.Background(), tx, "tx@example.com", outbox.Email{
+	err := store.Create(dbtx.WithTransactionContext(context.Background(), tx), "tx@example.com", outbox.Email{
 		Subject:  "subject",
 		HTMLBody: "body",
 	})

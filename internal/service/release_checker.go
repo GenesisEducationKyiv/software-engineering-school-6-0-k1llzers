@@ -2,15 +2,15 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/mail"
 	"github-release-notifier/internal/readmodel"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -23,11 +23,11 @@ type ReleaseMonitor struct {
 	repositories  trackedRepositoryTagUpdater
 	subscriptions confirmedSubscriptionReader
 	repositoryAPI latestReleaseReader
-	mailQueue     mail.ReleaseNotificationQueue
+	mailQueue     ReleaseNotificationQueue
 }
 
 type trackedRepositoryTagUpdater interface {
-	UpdateLastSeenTag(ctx context.Context, tx *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error
+	UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error
 }
 
 type confirmedSubscriptionReader interface {
@@ -38,12 +38,16 @@ type latestReleaseReader interface {
 	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
+type ReleaseNotificationQueue interface {
+	QueueReleaseNotification(ctx context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error
+}
+
 func NewReleaseMonitor(
 	txManager txManager,
 	repositories trackedRepositoryTagUpdater,
 	subscriptions confirmedSubscriptionReader,
 	repositoryAPI latestReleaseReader,
-	mailQueue mail.ReleaseNotificationQueue,
+	mailQueue ReleaseNotificationQueue,
 ) *ReleaseMonitor {
 	return &ReleaseMonitor{
 		txManager:     txManager,
@@ -140,14 +144,14 @@ func mapLatestReleaseError(group confirmedSubscriptionGroup, err error) error {
 func (m *ReleaseMonitor) queueReleaseNotifications(ctx context.Context, group confirmedSubscriptionGroup, release domain.Release) error {
 	releaseURL := buildReleaseURL(group.owner, group.name, release.TagName, release.HTMLURL)
 
-	return m.txManager.WithinTransaction(ctx, func(tx *sql.Tx) error {
+	return m.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
 		for _, subscription := range group.subscriptions {
-			if err := m.mailQueue.QueueReleaseNotification(ctx, tx, subscription.Email, group.fullName(), release.TagName, releaseURL, subscription.CancellationToken); err != nil {
+			if err := m.mailQueue.QueueReleaseNotification(ctx, subscription.Email, group.fullName(), release.TagName, releaseURL, subscription.CancellationToken); err != nil {
 				return err
 			}
 		}
 
-		return m.repositories.UpdateLastSeenTag(ctx, tx, group.trackedRepositoryID, release.TagName)
+		return m.repositories.UpdateLastSeenTag(ctx, group.trackedRepositoryID, release.TagName)
 	})
 }
 

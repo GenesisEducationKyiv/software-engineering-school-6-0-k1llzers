@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	dbtx "github-release-notifier/internal/db"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,7 +15,7 @@ func TestUserStore_CreateIfNotExists_CreatesUser(t *testing.T) {
 
 	ctx := context.Background()
 
-	created, err := store.CreateIfNotExists(ctx, nil, "test@example.com")
+	created, err := store.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
 	require.Equal(t, "test@example.com", created.Email)
@@ -27,10 +29,10 @@ func TestUserStore_CreateIfNotExists_WhenUserAlreadyExists_ReturnsExistingUser(t
 
 	ctx := context.Background()
 
-	first, err := store.CreateIfNotExists(ctx, nil, "test@example.com")
+	first, err := store.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	second, err := store.CreateIfNotExists(ctx, nil, "test@example.com")
+	second, err := store.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID)
 	require.Equal(t, first.Email, second.Email)
@@ -43,7 +45,7 @@ func TestUserStore_CreateIfNotExists_UsesTransaction(t *testing.T) {
 	store := NewUserStore(db)
 
 	tx := beginTestTx(t, db)
-	created, err := store.CreateIfNotExists(context.Background(), tx, "tx-user@example.com")
+	created, err := store.CreateIfNotExists(dbtx.WithTransactionContext(context.Background(), tx), "tx-user@example.com")
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 

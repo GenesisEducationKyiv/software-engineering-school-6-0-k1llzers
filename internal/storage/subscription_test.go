@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	dbtx "github-release-notifier/internal/db"
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/readmodel"
 
@@ -21,13 +22,13 @@ func TestSubscriptionStore_Create(t *testing.T) {
 
 	ctx := context.Background()
 
-	user, err := userStore.CreateIfNotExists(ctx, nil, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 
-	created, err := subscriptionStore.Create(ctx, nil, user.ID, trackedRepository.ID)
+	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
 	require.Equal(t, user.ID, created.UserID)
@@ -46,14 +47,14 @@ func TestSubscriptionStore_Create_UsesTransaction(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	user, err := userStore.CreateIfNotExists(ctx, nil, "tx@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "tx@example.com")
 	require.NoError(t, err)
 
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "")
+	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "")
 	require.NoError(t, err)
 
 	tx := beginTestTx(t, db)
-	created, err := subscriptionStore.Create(ctx, tx, user.ID, repository.ID)
+	created, err := subscriptionStore.Create(dbtx.WithTransactionContext(ctx, tx), user.ID, repository.ID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 
@@ -72,16 +73,16 @@ func TestSubscriptionStore_Create_DuplicateSubscription(t *testing.T) {
 
 	ctx := context.Background()
 
-	user, err := userStore.CreateIfNotExists(ctx, nil, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 
-	_, err = subscriptionStore.Create(ctx, nil, user.ID, trackedRepository.ID)
+	_, err = subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
 	require.NoError(t, err)
 
-	_, err = subscriptionStore.Create(ctx, nil, user.ID, trackedRepository.ID)
+	_, err = subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
 	require.ErrorIs(t, err, domain.ErrAlreadyExists)
 }
 
@@ -94,13 +95,13 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 
 	ctx := context.Background()
 
-	user, err := userStore.CreateIfNotExists(ctx, nil, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 
-	created, err := subscriptionStore.Create(ctx, nil, user.ID, trackedRepository.ID)
+	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
@@ -121,13 +122,13 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 
 	ctx := context.Background()
 
-	user, err := userStore.CreateIfNotExists(ctx, nil, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 
-	created, err := subscriptionStore.Create(ctx, nil, user.ID, trackedRepository.ID)
+	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
@@ -154,13 +155,13 @@ func TestSubscriptionStore_DeleteByCancellationToken(t *testing.T) {
 
 	ctx := context.Background()
 
-	user, err := userStore.CreateIfNotExists(ctx, nil, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 
-	created, err := subscriptionStore.Create(ctx, nil, user.ID, trackedRepository.ID)
+	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
 	require.NoError(t, err)
 
 	err = subscriptionStore.DeleteByCancellationToken(ctx, created.CancellationToken.String())
@@ -189,19 +190,19 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 
 	ctx := context.Background()
 
-	user, err := userStore.CreateIfNotExists(ctx, nil, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
 	require.NoError(t, err)
 
-	firstRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.11.0")
+	firstRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.11.0")
 	require.NoError(t, err)
 
-	secondRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "labstack", "echo", "v4.13.4")
+	secondRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, "labstack", "echo", "v4.13.4")
 	require.NoError(t, err)
 
-	firstSubscription, err := subscriptionStore.Create(ctx, nil, user.ID, firstRepo.ID)
+	firstSubscription, err := subscriptionStore.Create(ctx, user.ID, firstRepo.ID)
 	require.NoError(t, err)
 
-	_, err = subscriptionStore.Create(ctx, nil, user.ID, secondRepo.ID)
+	_, err = subscriptionStore.Create(ctx, user.ID, secondRepo.ID)
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())
@@ -241,19 +242,19 @@ func TestSubscriptionStore_ListConfirmedRepositorySubscriptions_ReturnsOnlyConfi
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	firstUser, err := userStore.CreateIfNotExists(ctx, nil, "a@example.com")
+	firstUser, err := userStore.CreateIfNotExists(ctx, "a@example.com")
 	require.NoError(t, err)
 
-	secondUser, err := userStore.CreateIfNotExists(ctx, nil, "b@example.com")
+	secondUser, err := userStore.CreateIfNotExists(ctx, "b@example.com")
 	require.NoError(t, err)
 
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.11.0")
+	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.11.0")
 	require.NoError(t, err)
 
-	firstSubscription, err := subscriptionStore.Create(ctx, nil, firstUser.ID, repository.ID)
+	firstSubscription, err := subscriptionStore.Create(ctx, firstUser.ID, repository.ID)
 	require.NoError(t, err)
 
-	secondSubscription, err := subscriptionStore.Create(ctx, nil, secondUser.ID, repository.ID)
+	secondSubscription, err := subscriptionStore.Create(ctx, secondUser.ID, repository.ID)
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())
@@ -277,7 +278,7 @@ func TestSubscriptionStore_Create_ReturnsForeignKeyErrorForUnknownReferences(t *
 	db := setupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
-	_, err := subscriptionStore.Create(context.Background(), nil, 999, 999)
+	_, err := subscriptionStore.Create(context.Background(), 999, 999)
 	require.Error(t, err)
 	require.False(t, errors.Is(err, domain.ErrAlreadyExists))
 }

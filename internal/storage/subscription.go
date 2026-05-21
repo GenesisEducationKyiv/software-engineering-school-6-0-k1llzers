@@ -19,7 +19,7 @@ func NewSubscriptionStore(db *sql.DB) *SubscriptionStore {
 	return &SubscriptionStore{db: db}
 }
 
-func (s *SubscriptionStore) Create(ctx context.Context, tx *sql.Tx, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
+func (s *SubscriptionStore) Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
 	query := `
 		insert into subscriptions (user_id, tracked_repository_id)
 		values ($1, $2)
@@ -28,7 +28,7 @@ func (s *SubscriptionStore) Create(ctx context.Context, tx *sql.Tx, userID int64
 
 	var created domain.Subscription
 
-	err := newQueryExecutor(s.db, tx).QueryRowContext(ctx, query, userID, trackedRepositoryID).Scan(
+	err := newQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, userID, trackedRepositoryID).Scan(
 		&created.ID,
 		&created.UserID,
 		&created.TrackedRepositoryID,

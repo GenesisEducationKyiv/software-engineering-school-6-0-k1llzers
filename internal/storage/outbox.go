@@ -17,13 +17,13 @@ func NewOutboxStore(db *sql.DB) *OutboxStore {
 	return &OutboxStore{db: db}
 }
 
-func (s *OutboxStore) Create(ctx context.Context, tx *sql.Tx, recipientEmail string, email outbox.Email) error {
+func (s *OutboxStore) Create(ctx context.Context, recipientEmail string, email outbox.Email) error {
 	query := `
 		insert into mail_outbox (recipient_email, subject, html_body)
 		values ($1, $2, $3);
 	`
 
-	_, err := newQueryExecutor(s.db, tx).ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
+	_, err := newQueryExecutor(ctx, s.db).ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
 	return err
 }
 

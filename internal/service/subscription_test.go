@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 
@@ -19,7 +18,7 @@ type userCreatorStub struct {
 	email string
 }
 
-func (s *userCreatorStub) CreateIfNotExists(_ context.Context, _ *sql.Tx, email string) (domain.User, error) {
+func (s *userCreatorStub) CreateIfNotExists(_ context.Context, email string) (domain.User, error) {
 	s.email = email
 	if s.err != nil {
 		return domain.User{}, s.err
@@ -38,7 +37,7 @@ type trackedRepositoryProviderStub struct {
 	updatedTag  string
 }
 
-func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, _ *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
 	s.owner = owner
 	s.repoName = name
 	s.lastSeenTag = lastSeenTag
@@ -49,7 +48,7 @@ func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, _ *
 	return s.result, nil
 }
 
-func (s *trackedRepositoryProviderStub) UpdateLastSeenTag(_ context.Context, _ *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error {
+func (s *trackedRepositoryProviderStub) UpdateLastSeenTag(_ context.Context, trackedRepositoryID int64, lastSeenTag string) error {
 	s.updatedID = trackedRepositoryID
 	s.updatedTag = lastSeenTag
 	return s.err
@@ -93,7 +92,7 @@ type subscriptionCreatorStub struct {
 	listEmail           string
 }
 
-func (s *subscriptionCreatorStub) Create(_ context.Context, _ *sql.Tx, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
+func (s *subscriptionCreatorStub) Create(_ context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
 	s.createdUserID = userID
 	s.createdRepositoryID = trackedRepositoryID
 	if s.err != nil {
@@ -145,9 +144,9 @@ type transactionManagerStub struct {
 	rolledBack bool
 }
 
-func (s *transactionManagerStub) WithinTransaction(_ context.Context, fn func(tx *sql.Tx) error) error {
+func (s *transactionManagerStub) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	s.called = true
-	err := fn(nil)
+	err := fn(ctx)
 	if err != nil {
 		s.rolledBack = true
 		return err
@@ -184,11 +183,11 @@ func (s *confirmationSenderStub) SendSubscriptionConfirmation(_ context.Context,
 	return s.err
 }
 
-func (s *confirmationSenderStub) QueueSubscriptionConfirmation(ctx context.Context, _ *sql.Tx, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
+func (s *confirmationSenderStub) QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
 	return s.SendSubscriptionConfirmation(ctx, recipientEmail, repositoryFullName, confirmationToken, cancellationToken)
 }
 
-func (s *confirmationSenderStub) QueueReleaseNotification(_ context.Context, _ *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
+func (s *confirmationSenderStub) QueueReleaseNotification(_ context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
 	s.called = true
 	s.releaseRecipient = recipientEmail
 	s.releaseRepo = repositoryFullName

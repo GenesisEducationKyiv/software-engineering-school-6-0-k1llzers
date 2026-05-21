@@ -2,7 +2,6 @@ package mail
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 
@@ -38,7 +37,7 @@ type outboxWriterStub struct {
 	called         bool
 }
 
-func (s *outboxWriterStub) Create(_ context.Context, _ *sql.Tx, recipientEmail string, email outbox.Email) error {
+func (s *outboxWriterStub) Create(_ context.Context, recipientEmail string, email outbox.Email) error {
 	s.called = true
 	s.recipientEmail = recipientEmail
 	s.email = email
@@ -59,7 +58,6 @@ func TestService_QueueSubscriptionConfirmation(t *testing.T) {
 
 	err := service.QueueSubscriptionConfirmation(
 		context.Background(),
-		nil,
 		"user@example.com",
 		"gin-gonic/gin",
 		uuid.MustParse("11111111-1111-1111-1111-111111111111"),
@@ -82,7 +80,6 @@ func TestService_QueueSubscriptionConfirmation_ReturnsRendererError(t *testing.T
 
 	err := service.QueueSubscriptionConfirmation(
 		context.Background(),
-		nil,
 		"user@example.com",
 		"gin-gonic/gin",
 		uuid.New(),
@@ -103,7 +100,6 @@ func TestService_QueueSubscriptionConfirmation_ReturnsOutboxError(t *testing.T) 
 
 	err := service.QueueSubscriptionConfirmation(
 		context.Background(),
-		nil,
 		"user@example.com",
 		"gin-gonic/gin",
 		uuid.New(),
@@ -128,7 +124,6 @@ func TestService_QueueReleaseNotification(t *testing.T) {
 
 	err := service.QueueReleaseNotification(
 		context.Background(),
-		nil,
 		"user@example.com",
 		"gin-gonic/gin",
 		"v1.11.0",
@@ -152,7 +147,6 @@ func TestService_QueueReleaseNotification_ReturnsRendererError(t *testing.T) {
 
 	err := service.QueueReleaseNotification(
 		context.Background(),
-		nil,
 		"user@example.com",
 		"gin-gonic/gin",
 		"v1.11.0",
@@ -174,7 +168,6 @@ func TestService_QueueReleaseNotification_ReturnsOutboxError(t *testing.T) {
 
 	err := service.QueueReleaseNotification(
 		context.Background(),
-		nil,
 		"user@example.com",
 		"gin-gonic/gin",
 		"v1.11.0",

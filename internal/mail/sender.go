@@ -100,16 +100,6 @@ func (s *SMTPSender) Send(ctx context.Context, to string, email RenderedEmail) e
 	return nil
 }
 
-type NoopSender struct{}
-
-func NewNoopSender() *NoopSender {
-	return &NoopSender{}
-}
-
-func (s *NoopSender) Send(_ context.Context, _ string, _ RenderedEmail) error {
-	return nil
-}
-
 func buildMessage(from string, to string, email RenderedEmail) string {
 	headers := []string{
 		"MIME-Version: 1.0",

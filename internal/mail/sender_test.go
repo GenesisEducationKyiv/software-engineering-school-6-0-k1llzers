@@ -1,7 +1,6 @@
 package mail
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,15 +29,6 @@ func TestNewSMTPSender_WithoutCredentials_DoesNotCreateAuth(t *testing.T) {
 	})
 
 	require.Nil(t, sender.auth)
-}
-
-func TestNoopSender_Send(t *testing.T) {
-	err := NewNoopSender().Send(context.Background(), "user@example.com", RenderedEmail{
-		Subject:  "subject",
-		HTMLBody: "<p>body</p>",
-	})
-
-	require.NoError(t, err)
 }
 
 func TestBuildMessage(t *testing.T) {

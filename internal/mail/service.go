@@ -19,8 +19,11 @@ type outboxWriter interface {
 	Create(ctx context.Context, tx *sql.Tx, recipientEmail string, email outbox.Email) error
 }
 
-type Queue interface {
+type ConfirmationQueue interface {
 	QueueSubscriptionConfirmation(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
+}
+
+type ReleaseNotificationQueue interface {
 	QueueReleaseNotification(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error
 }
 

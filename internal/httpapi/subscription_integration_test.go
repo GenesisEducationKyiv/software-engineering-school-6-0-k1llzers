@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -316,8 +317,13 @@ func TestSubscriptionAPI_UnsubscribeUnknownToken(t *testing.T) {
 func (f subscriptionAPIFixture) postSubscribe(t *testing.T, email string, repo string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	body := `{"email":"` + email + `","repo":"` + repo + `"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewBufferString(body))
+	body, err := json.Marshal(map[string]string{
+		"email": email,
+		"repo":  repo,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	return f.do(req)
 }

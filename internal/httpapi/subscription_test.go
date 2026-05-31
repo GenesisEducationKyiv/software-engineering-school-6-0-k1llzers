@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github-release-notifier/internal/domain"
+	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/readmodel"
 
 	"github.com/gin-gonic/gin"
@@ -67,7 +68,7 @@ func TestSubscriptionHandler_Create(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	service := &subscriptionServiceStub{}
-	router := NewRouter(NewSubscriptionHandler(service))
+	router := NewRouter(NewSubscriptionHandler(service), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewBufferString(`{"email":"test@example.com","repo":"gin-gonic/gin"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -84,7 +85,7 @@ func TestSubscriptionHandler_Create(t *testing.T) {
 func TestSubscriptionHandler_Create_BadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}))
+	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewBufferString(`{"email":"not-an-email"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -109,7 +110,7 @@ func TestSubscriptionHandler_List(t *testing.T) {
 			},
 		},
 	}
-	router := NewRouter(NewSubscriptionHandler(service))
+	router := NewRouter(NewSubscriptionHandler(service), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/subscriptions?email=test@example.com", nil)
 	recorder := httptest.NewRecorder()
@@ -131,7 +132,7 @@ func TestSubscriptionHandler_List(t *testing.T) {
 func TestSubscriptionHandler_List_BadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}))
+	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}), newTestMetrics(t))
 
 	testCases := []struct {
 		name string
@@ -158,7 +159,7 @@ func TestSubscriptionHandler_List_BadRequest(t *testing.T) {
 func TestSubscriptionHandler_List_InternalError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: errors.New("boom")}))
+	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: errors.New("boom")}), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/subscriptions?email=test@example.com", nil)
 	recorder := httptest.NewRecorder()
@@ -187,7 +188,7 @@ func TestSubscriptionHandler_Create_MapsDomainErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: tc.err}))
+			router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: tc.err}), newTestMetrics(t))
 
 			req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewBufferString(`{"email":"test@example.com","repo":"gin-gonic/gin"}`))
 			req.Header.Set("Content-Type", "application/json")
@@ -207,7 +208,7 @@ func TestSubscriptionHandler_Confirm(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	service := &subscriptionServiceStub{}
-	router := NewRouter(NewSubscriptionHandler(service))
+	router := NewRouter(NewSubscriptionHandler(service), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/confirm/11111111-1111-1111-1111-111111111111", nil)
 	recorder := httptest.NewRecorder()
@@ -221,7 +222,7 @@ func TestSubscriptionHandler_Confirm(t *testing.T) {
 func TestSubscriptionHandler_Confirm_BadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}))
+	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/confirm/invalid", nil)
 	recorder := httptest.NewRecorder()
@@ -247,7 +248,7 @@ func TestSubscriptionHandler_Confirm_MapsErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: tc.err}))
+			router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: tc.err}), newTestMetrics(t))
 
 			req := httptest.NewRequest(http.MethodGet, "/api/confirm/11111111-1111-1111-1111-111111111111", nil)
 			recorder := httptest.NewRecorder()
@@ -263,7 +264,7 @@ func TestSubscriptionHandler_Cancel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	service := &subscriptionServiceStub{}
-	router := NewRouter(NewSubscriptionHandler(service))
+	router := NewRouter(NewSubscriptionHandler(service), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/unsubscribe/22222222-2222-2222-2222-222222222222", nil)
 	recorder := httptest.NewRecorder()
@@ -277,7 +278,7 @@ func TestSubscriptionHandler_Cancel(t *testing.T) {
 func TestSubscriptionHandler_Cancel_BadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}))
+	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}), newTestMetrics(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/unsubscribe/invalid", nil)
 	recorder := httptest.NewRecorder()
@@ -302,7 +303,7 @@ func TestSubscriptionHandler_Cancel_MapsErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: tc.err}))
+			router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{err: tc.err}), newTestMetrics(t))
 
 			req := httptest.NewRequest(http.MethodGet, "/api/unsubscribe/22222222-2222-2222-2222-222222222222", nil)
 			recorder := httptest.NewRecorder()
@@ -312,4 +313,29 @@ func TestSubscriptionHandler_Cancel_MapsErrors(t *testing.T) {
 			require.Equal(t, tc.statusCode, recorder.Code)
 		})
 	}
+}
+
+func TestRouter_ExposesMetricsEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}), newTestMetrics(t))
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "github_release_notifier")
+}
+
+func newTestMetrics(t *testing.T) *appmetrics.Metrics {
+	t.Helper()
+
+	metricSet, err := appmetrics.New()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, metricSet.Shutdown(context.Background()))
+	})
+
+	return metricSet
 }

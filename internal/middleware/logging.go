@@ -10,6 +10,11 @@ import (
 
 func RequestLoggerMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if currentRoute(c) == "/metrics" {
+			c.Next()
+			return
+		}
+
 		startedAt := time.Now()
 		c.Next()
 

@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"github-release-notifier/internal/logging"
+	"log/slog"
 	"net/http"
 
 	"github-release-notifier/internal/readmodel"
@@ -45,7 +47,17 @@ func (h *SubscriptionHandler) Create(c *gin.Context) {
 
 	err := h.subscriptions.Subscribe(c.Request.Context(), req.Email, req.RepositoryFullName)
 	if err != nil {
-		writeSubscriptionCreateError(c, err)
+		response := subscriptionCreateErrorResponder.Resolve(err)
+		slog.Log(
+			c.Request.Context(),
+			logging.LogLevelForHTTPStatus(response.status),
+			"subscription create failed",
+			"status", response.status,
+			"email", req.Email,
+			"repo", req.RepositoryFullName,
+			"error", err,
+		)
+		c.JSON(response.status, gin.H{"error": response.message})
 		return
 	}
 
@@ -61,6 +73,7 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 
 	subscriptions, err := h.subscriptions.ListSubscriptions(c.Request.Context(), email)
 	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "subscription list failed", "email", email, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
@@ -76,7 +89,15 @@ func (h *SubscriptionHandler) Confirm(c *gin.Context) {
 	}
 
 	if err := h.subscriptions.ConfirmSubscription(c.Request.Context(), token); err != nil {
-		writeSubscriptionConfirmError(c, err)
+		response := subscriptionConfirmErrorResponder.Resolve(err)
+		slog.Log(
+			c.Request.Context(),
+			logging.LogLevelForHTTPStatus(response.status),
+			"subscription confirm failed",
+			"status", response.status,
+			"error", err,
+		)
+		c.JSON(response.status, gin.H{"error": response.message})
 		return
 	}
 
@@ -91,7 +112,15 @@ func (h *SubscriptionHandler) Cancel(c *gin.Context) {
 	}
 
 	if err := h.subscriptions.CancelSubscription(c.Request.Context(), token); err != nil {
-		writeSubscriptionCancelError(c, err)
+		response := subscriptionCancelErrorResponder.Resolve(err)
+		slog.Log(
+			c.Request.Context(),
+			logging.LogLevelForHTTPStatus(response.status),
+			"subscription cancel failed",
+			"status", response.status,
+			"error", err,
+		)
+		c.JSON(response.status, gin.H{"error": response.message})
 		return
 	}
 

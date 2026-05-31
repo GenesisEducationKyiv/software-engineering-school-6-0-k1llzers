@@ -3,7 +3,7 @@ package mail
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 
 	"github-release-notifier/internal/domain"
@@ -50,7 +50,7 @@ func (d *OutboxDispatcher) Run(ctx context.Context) {
 				}
 			}
 
-			log.Printf("mail outbox claim failed: %v", err)
+			slog.ErrorContext(ctx, "mail outbox claim failed", "error", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -65,14 +65,14 @@ func (d *OutboxDispatcher) Run(ctx context.Context) {
 		})
 		if sendErr != nil {
 			if err := d.store.Release(ctx, email.ID, sendErr.Error()); err != nil {
-				log.Printf("mail outbox release failed for id=%d: %v", email.ID, err)
+				slog.ErrorContext(ctx, "mail outbox release failed", "email_id", email.ID, "error", err)
 			}
-			log.Printf("mail send failed for id=%d: %v", email.ID, sendErr)
+			slog.WarnContext(ctx, "mail send failed", "email_id", email.ID, "error", sendErr)
 			continue
 		}
 
 		if err := d.store.MarkSent(ctx, email.ID); err != nil {
-			log.Printf("mail outbox mark sent failed for id=%d: %v", email.ID, err)
+			slog.ErrorContext(ctx, "mail outbox mark sent failed", "email_id", email.ID, "error", err)
 		}
 	}
 }

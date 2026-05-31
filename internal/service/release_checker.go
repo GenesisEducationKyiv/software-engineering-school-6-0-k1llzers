@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github-release-notifier/internal/domain"
@@ -65,12 +65,12 @@ func (m *ReleaseMonitor) Run(ctx context.Context) {
 	for {
 		if err := m.CheckOnce(ctx); err != nil && ctx.Err() == nil {
 			if errors.Is(err, domain.ErrRateLimited) {
-				log.Printf("release monitor hit github rate limit, pausing for %s: %v", defaultRateLimitBackoff, err)
+				slog.WarnContext(ctx, "release monitor hit github rate limit", "backoff", defaultRateLimitBackoff.String(), "error", err)
 				if !sleepContext(ctx, defaultRateLimitBackoff) {
 					return
 				}
 			} else {
-				log.Printf("release monitor failed: %v", err)
+				slog.ErrorContext(ctx, "release monitor failed", "error", err)
 			}
 		}
 

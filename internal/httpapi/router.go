@@ -1,9 +1,14 @@
 package httpapi
 
-import "github.com/gin-gonic/gin"
+import (
+	"github-release-notifier/internal/middleware"
+
+	"github.com/gin-gonic/gin"
+)
 
 func NewRouter(subscriptionHandler *SubscriptionHandler) *gin.Engine {
 	router := gin.New()
+	router.Use(middleware.RequestLoggerMiddleware())
 	router.Use(gin.Recovery())
 
 	api := router.Group("/api")

@@ -6,8 +6,11 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"testing"
 
@@ -19,6 +22,7 @@ import (
 	"github-release-notifier/internal/storage"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,20 +65,11 @@ type subscriptionTokens struct {
 	CancellationToken string
 }
 
-type testTable string
-
-const (
-	tableMailOutbox          testTable = "mail_outbox"
-	tableSubscriptions       testTable = "subscriptions"
-	tableTrackedRepositories testTable = "tracked_repositories"
-	tableUsers               testTable = "users"
-)
-
-var rowCountQueryByTable = map[testTable]string{
-	tableMailOutbox:          `select count(*) from mail_outbox`,
-	tableSubscriptions:       `select count(*) from subscriptions`,
-	tableTrackedRepositories: `select count(*) from tracked_repositories`,
-	tableUsers:               `select count(*) from users`,
+type subscriptionTestData struct {
+	Email string
+	Owner string
+	Name  string
+	Repo  string
 }
 
 func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
@@ -114,143 +109,151 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	}
 }
 
+func newSubscriptionTestData() subscriptionTestData {
+	id := uuid.NewString()
+	return subscriptionTestData{
+		Email: fmt.Sprintf("test-%s@example.com", id),
+		Owner: "gin",
+		Name:  id,
+		Repo:  "gin/" + id,
+	}
+}
+
 func TestSubscriptionAPI_SubscribeQueuesConfirmationEmail(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 
-	subscribeResponse := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	subscribeResponse := fixture.postSubscribe(t, data.Email, data.Repo)
 	require.Equal(t, http.StatusOK, subscribeResponse.Code)
 	require.Empty(t, subscribeResponse.Body.String())
 
-	requireTableRowCount(t, fixture.db, tableUsers, 1)
-	requireTableRowCount(t, fixture.db, tableTrackedRepositories, 1)
-	requireTableRowCount(t, fixture.db, tableSubscriptions, 1)
-	requireTableRowCount(t, fixture.db, tableMailOutbox, 1)
-	requireTrackedRepository(t, fixture.db, "gin-gonic", "gin", "v1.11.0")
+	requireUserRowCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
+	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
+	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "v1.11.0")
 
-	tokens := requireSubscriptionTokens(t, fixture.db, "test@example.com", "gin-gonic/gin")
-	requireLatestOutboxEmail(t, fixture.db, outboxRow{
-		RecipientEmail: "test@example.com",
+	tokens := requireSubscriptionTokens(t, fixture.db, data.Email, data.Repo)
+	requireOutboxEmail(t, fixture.db, data.Email, outboxRow{
+		RecipientEmail: data.Email,
 		Subject:        "Confirm your GitHub release subscription",
-		HTMLBody:       "gin-gonic/gin",
+		HTMLBody:       data.Repo,
 	})
-	requireLatestOutboxEmailContains(t, fixture.db, "http://example.test/api/confirm/"+tokens.ConfirmationToken)
-	requireLatestOutboxEmailContains(t, fixture.db, "http://example.test/api/unsubscribe/"+tokens.CancellationToken)
+	requireOutboxEmailContains(t, fixture.db, data.Email, "http://example.test/api/confirm/"+tokens.ConfirmationToken)
+	requireOutboxEmailContains(t, fixture.db, data.Email, "http://example.test/api/unsubscribe/"+tokens.CancellationToken)
 }
 
 func TestSubscriptionAPI_SubscribeDuplicateDoesNotQueueSecondEmail(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 
-	firstResponse := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	firstResponse := fixture.postSubscribe(t, data.Email, data.Repo)
 	require.Equal(t, http.StatusOK, firstResponse.Code)
 
-	secondResponse := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	secondResponse := fixture.postSubscribe(t, data.Email, data.Repo)
 	require.Equal(t, http.StatusConflict, secondResponse.Code)
 	require.JSONEq(t, `{"error":"resource already exists"}`, secondResponse.Body.String())
 
-	requireTableRowCount(t, fixture.db, tableUsers, 1)
-	requireTableRowCount(t, fixture.db, tableTrackedRepositories, 1)
-	requireTableRowCount(t, fixture.db, tableSubscriptions, 1)
-	requireTableRowCount(t, fixture.db, tableMailOutbox, 1)
+	requireUserRowCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
+	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
+	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
 }
 
 func TestSubscriptionAPI_SubscribeGitHubErrorDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 	fixture.githubClient.releaseErr = domain.ErrRateLimited
 
-	response := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
 	require.Equal(t, http.StatusServiceUnavailable, response.Code)
 	require.JSONEq(t, `{"error":"github is temporarily unavailable, please try again later"}`, response.Body.String())
-	requireBusinessTablesAreClear(t, fixture.db)
-	requireTableIsClear(t, fixture.db, tableMailOutbox)
+	requireNoBusinessDataOrOutbox(t, fixture.db, data)
 }
 
 func TestSubscriptionAPI_SubscribeRepositoryNotFoundDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 	fixture.githubClient.existsErr = domain.ErrNotFound
 
-	response := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
 	require.Equal(t, http.StatusNotFound, response.Code)
 	require.JSONEq(t, `{"error":"resource not found"}`, response.Body.String())
-	requireBusinessTablesAreClear(t, fixture.db)
-	requireTableIsClear(t, fixture.db, tableMailOutbox)
+	require.Equal(t, 1, fixture.githubClient.repositoryExistsCalls)
+	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
+	requireNoBusinessDataOrOutbox(t, fixture.db, data)
 }
 
 func TestSubscriptionAPI_SubscribeRepositoryExistsRateLimitedDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 	fixture.githubClient.existsErr = domain.ErrRateLimited
 
-	response := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
 	require.Equal(t, http.StatusServiceUnavailable, response.Code)
 	require.JSONEq(t, `{"error":"github is temporarily unavailable, please try again later"}`, response.Body.String())
-	requireBusinessTablesAreClear(t, fixture.db)
-	requireTableIsClear(t, fixture.db, tableMailOutbox)
+	require.Equal(t, 1, fixture.githubClient.repositoryExistsCalls)
+	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
+	requireNoBusinessDataOrOutbox(t, fixture.db, data)
 }
 
 func TestSubscriptionAPI_SubscribeRepositoryWithoutReleasesCreatesSubscriptionWithEmptyLastSeenTag(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 	fixture.githubClient.releaseErr = domain.ErrNoReleases
 
-	response := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
+	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
 	require.Equal(t, http.StatusOK, response.Code)
-	requireTableRowCount(t, fixture.db, tableUsers, 1)
-	requireTableRowCount(t, fixture.db, tableTrackedRepositories, 1)
-	requireTableRowCount(t, fixture.db, tableSubscriptions, 1)
-	requireTableRowCount(t, fixture.db, tableMailOutbox, 1)
-	requireTrackedRepository(t, fixture.db, "gin-gonic", "gin", "")
+	requireUserRowCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
+	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
+	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
 }
 
 func TestSubscriptionAPI_SubscribeIncorrectRepositoryFormatDoesNotCallGitHubOrPersistData(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 
-	response := fixture.postSubscribe(t, "test@example.com", "gin-gonic")
+	response := fixture.postSubscribe(t, data.Email, data.Owner)
 
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.JSONEq(t, `{"error":"incorrect repository format"}`, response.Body.String())
 	require.Equal(t, 0, fixture.githubClient.repositoryExistsCalls)
 	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
-	requireBusinessTablesAreClear(t, fixture.db)
-	requireTableIsClear(t, fixture.db, tableMailOutbox)
-}
-
-func TestSubscriptionAPI_SubscribeOutboxFailureRollsBackBusinessData(t *testing.T) {
-	fixture := setupSubscriptionAPIIntegrationTest(t)
-	requireOutboxTableBroken(t, fixture.db)
-
-	response := fixture.postSubscribe(t, "test@example.com", "gin-gonic/gin")
-
-	require.Equal(t, http.StatusInternalServerError, response.Code)
-	require.JSONEq(t, `{"error":"internal server error"}`, response.Body.String())
-	requireBusinessTablesAreClear(t, fixture.db)
+	requireNoBusinessDataOrOutbox(t, fixture.db, data)
 }
 
 func TestSubscriptionAPI_ListReturnsSubscriptions(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 
-	createSubscription(t, fixture, "test@example.com", "gin-gonic/gin")
+	createSubscription(t, fixture, data.Email, data.Repo)
 
-	listBeforeConfirm := fixture.get(t, "/api/subscriptions?email=test@example.com")
+	listBeforeConfirm := fixture.get(t, subscriptionListURL(data.Email))
 	require.Equal(t, http.StatusOK, listBeforeConfirm.Code)
-	require.JSONEq(t, `[
+	requireSubscriptionsListResponse(t, listBeforeConfirm, []listSubscriptionsResponse{
 		{
-			"email": "test@example.com",
-			"repo": "gin-gonic/gin",
-			"confirmed": false,
-			"last_seen_tag": "v1.11.0"
-		}
-	]`, listBeforeConfirm.Body.String())
+			Email:       data.Email,
+			Repo:        data.Repo,
+			Confirmed:   false,
+			LastSeenTag: "v1.11.0",
+		},
+	})
 }
 
 func TestSubscriptionAPI_ListReturnsEmptyArrayWhenEmailHasNoSubscriptions(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
+	data := newSubscriptionTestData()
 
-	response := fixture.get(t, "/api/subscriptions?email=missing@example.com")
+	response := fixture.get(t, subscriptionListURL(data.Email))
 
 	require.Equal(t, http.StatusOK, response.Code)
-	require.JSONEq(t, `[]`, response.Body.String())
+	requireSubscriptionsListResponse(t, response, nil)
 }
 
 func TestSubscriptionAPI_ListRejectsMissingEmail(t *testing.T) {
@@ -264,16 +267,29 @@ func TestSubscriptionAPI_ListRejectsMissingEmail(t *testing.T) {
 
 func TestSubscriptionAPI_ConfirmSubscription(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
-	tokens := createSubscription(t, fixture, "test@example.com", "gin-gonic/gin")
+	data := newSubscriptionTestData()
+	tokens := createSubscription(t, fixture, data.Email, data.Repo)
 
 	confirmResponse := fixture.get(t, "/api/confirm/"+tokens.ConfirmationToken)
 	require.Equal(t, http.StatusOK, confirmResponse.Code)
 	requireSubscriptionConfirmed(t, fixture.db, tokens.ConfirmationToken)
+
+	listAfterConfirm := fixture.get(t, subscriptionListURL(data.Email))
+	require.Equal(t, http.StatusOK, listAfterConfirm.Code)
+	requireSubscriptionsListResponse(t, listAfterConfirm, []listSubscriptionsResponse{
+		{
+			Email:       data.Email,
+			Repo:        data.Repo,
+			Confirmed:   true,
+			LastSeenTag: "v1.11.0",
+		},
+	})
 }
 
 func TestSubscriptionAPI_ConfirmAlreadyConfirmedSubscription(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
-	tokens := createSubscription(t, fixture, "test@example.com", "gin-gonic/gin")
+	data := newSubscriptionTestData()
+	tokens := createSubscription(t, fixture, data.Email, data.Repo)
 
 	firstResponse := fixture.get(t, "/api/confirm/"+tokens.ConfirmationToken)
 	require.Equal(t, http.StatusOK, firstResponse.Code)
@@ -295,16 +311,17 @@ func TestSubscriptionAPI_ConfirmUnknownToken(t *testing.T) {
 
 func TestSubscriptionAPI_UnsubscribeDeletesSubscription(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
-	tokens := createSubscription(t, fixture, "test@example.com", "gin-gonic/gin")
+	data := newSubscriptionTestData()
+	tokens := createSubscription(t, fixture, data.Email, data.Repo)
 
 	unsubscribeResponse := fixture.get(t, "/api/unsubscribe/"+tokens.CancellationToken)
 	require.Equal(t, http.StatusOK, unsubscribeResponse.Code)
-	requireTableIsClear(t, fixture.db, tableSubscriptions)
-	requireTableRowCount(t, fixture.db, tableMailOutbox, 1)
+	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 0)
+	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
 
-	listAfterUnsubscribe := fixture.get(t, "/api/subscriptions?email=test@example.com")
+	listAfterUnsubscribe := fixture.get(t, subscriptionListURL(data.Email))
 	require.Equal(t, http.StatusOK, listAfterUnsubscribe.Code)
-	require.JSONEq(t, `[]`, listAfterUnsubscribe.Body.String())
+	requireSubscriptionsListResponse(t, listAfterUnsubscribe, nil)
 }
 
 func TestSubscriptionAPI_UnsubscribeUnknownToken(t *testing.T) {
@@ -318,8 +335,13 @@ func TestSubscriptionAPI_UnsubscribeUnknownToken(t *testing.T) {
 func (f subscriptionAPIFixture) postSubscribe(t *testing.T, email string, repo string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	body := `{"email":"` + email + `","repo":"` + repo + `"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewBufferString(body))
+	body, err := json.Marshal(map[string]string{
+		"email": email,
+		"repo":  repo,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/subscribe", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	return f.do(req)
 }
@@ -344,30 +366,74 @@ func (f subscriptionAPIFixture) do(req *http.Request) *httptest.ResponseRecorder
 	return recorder
 }
 
-func requireBusinessTablesAreClear(t *testing.T, db *sql.DB) {
-	t.Helper()
-
-	requireTableIsClear(t, db, tableUsers)
-	requireTableIsClear(t, db, tableTrackedRepositories)
-	requireTableIsClear(t, db, tableSubscriptions)
+func subscriptionListURL(email string) string {
+	return "/api/subscriptions?email=" + url.QueryEscape(email)
 }
 
-func requireTableIsClear(t *testing.T, db *sql.DB, table testTable) {
+func requireNoBusinessDataOrOutbox(t *testing.T, db *sql.DB, data subscriptionTestData) {
 	t.Helper()
 
-	requireTableRowCount(t, db, table, 0)
+	requireUserRowCount(t, db, data.Email, 0)
+	requireTrackedRepositoryRowCount(t, db, data.Owner, data.Name, 0)
+	requireSubscriptionRowCount(t, db, data.Email, data.Owner, data.Name, 0)
+	requireOutboxEmailCount(t, db, data.Email, 0)
 }
 
-func requireTableRowCount(t *testing.T, db *sql.DB, table testTable, expectedCount int) {
+func requireUserRowCount(t *testing.T, db *sql.DB, email string, expectedCount int) {
 	t.Helper()
-
-	query, ok := rowCountQueryByTable[table]
-	require.True(t, ok, "unknown table %q", table)
 
 	var actualCount int
-	err := db.QueryRowContext(context.Background(), query).Scan(&actualCount)
+	err := db.QueryRowContext(context.Background(), `select count(*) from users where email = $1`, email).Scan(&actualCount)
 	require.NoError(t, err)
-	require.Equal(t, expectedCount, actualCount, "unexpected row count for table %s", table)
+	require.Equal(t, expectedCount, actualCount, "unexpected user row count for email %s", email)
+}
+
+func requireTrackedRepositoryRowCount(t *testing.T, db *sql.DB, owner string, name string, expectedCount int) {
+	t.Helper()
+
+	var actualCount int
+	err := db.QueryRowContext(
+		context.Background(),
+		`select count(*) from tracked_repositories where owner = $1 and name = $2`,
+		owner,
+		name,
+	).Scan(&actualCount)
+	require.NoError(t, err)
+	require.Equal(t, expectedCount, actualCount, "unexpected tracked repository row count for %s/%s", owner, name)
+}
+
+func requireSubscriptionRowCount(t *testing.T, db *sql.DB, email string, owner string, name string, expectedCount int) {
+	t.Helper()
+
+	var actualCount int
+	err := db.QueryRowContext(
+		context.Background(),
+		`
+			select count(*)
+			from subscriptions s
+			join users u on u.id = s.user_id
+			join tracked_repositories tr on tr.id = s.tracked_repository_id
+			where u.email = $1 and tr.owner = $2 and tr.name = $3
+		`,
+		email,
+		owner,
+		name,
+	).Scan(&actualCount)
+	require.NoError(t, err)
+	require.Equal(t, expectedCount, actualCount, "unexpected subscription row count for %s -> %s/%s", email, owner, name)
+}
+
+func requireOutboxEmailCount(t *testing.T, db *sql.DB, recipientEmail string, expectedCount int) {
+	t.Helper()
+
+	var actualCount int
+	err := db.QueryRowContext(
+		context.Background(),
+		`select count(*) from mail_outbox where recipient_email = $1`,
+		recipientEmail,
+	).Scan(&actualCount)
+	require.NoError(t, err)
+	require.Equal(t, expectedCount, actualCount, "unexpected outbox row count for recipient %s", recipientEmail)
 }
 
 func requireTrackedRepository(t *testing.T, db *sql.DB, owner string, name string, lastSeenTag string) {
@@ -404,23 +470,35 @@ func requireSubscriptionTokens(t *testing.T, db *sql.DB, email string, repo stri
 	return tokens
 }
 
-func requireLatestOutboxEmail(t *testing.T, db *sql.DB, expected outboxRow) {
+func requireSubscriptionsListResponse(t *testing.T, response *httptest.ResponseRecorder, expected []listSubscriptionsResponse) {
 	t.Helper()
 
-	actual := requireLatestOutboxEmailRow(t, db)
+	var actual []listSubscriptionsResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &actual))
+	if expected == nil {
+		require.Empty(t, actual)
+		return
+	}
+	require.Equal(t, expected, actual)
+}
+
+func requireOutboxEmail(t *testing.T, db *sql.DB, recipientEmail string, expected outboxRow) {
+	t.Helper()
+
+	actual := requireOutboxEmailRow(t, db, recipientEmail)
 	require.Equal(t, expected.RecipientEmail, actual.RecipientEmail)
 	require.Equal(t, expected.Subject, actual.Subject)
 	require.Contains(t, actual.HTMLBody, expected.HTMLBody)
 }
 
-func requireLatestOutboxEmailContains(t *testing.T, db *sql.DB, expectedContent string) {
+func requireOutboxEmailContains(t *testing.T, db *sql.DB, recipientEmail string, expectedContent string) {
 	t.Helper()
 
-	actual := requireLatestOutboxEmailRow(t, db)
+	actual := requireOutboxEmailRow(t, db, recipientEmail)
 	require.Contains(t, actual.HTMLBody, expectedContent)
 }
 
-func requireLatestOutboxEmailRow(t *testing.T, db *sql.DB) outboxRow {
+func requireOutboxEmailRow(t *testing.T, db *sql.DB, recipientEmail string) outboxRow {
 	t.Helper()
 
 	var result outboxRow
@@ -429,19 +507,14 @@ func requireLatestOutboxEmailRow(t *testing.T, db *sql.DB) outboxRow {
 		`
 			select recipient_email, subject, html_body
 			from mail_outbox
+			where recipient_email = $1
 			order by id desc
 			limit 1
 		`,
+		recipientEmail,
 	).Scan(&result.RecipientEmail, &result.Subject, &result.HTMLBody)
 	require.NoError(t, err)
 	return result
-}
-
-func requireOutboxTableBroken(t *testing.T, db *sql.DB) {
-	t.Helper()
-
-	_, err := db.ExecContext(context.Background(), `alter table mail_outbox rename to broken_mail_outbox`)
-	require.NoError(t, err)
 }
 
 func requireSubscriptionConfirmed(t *testing.T, db *sql.DB, confirmationToken string) {

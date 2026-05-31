@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,7 +14,39 @@ import (
 	tcppostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
+const (
+	sharedPostgresContainerName = "github-release-notifier-test-postgres"
+	sharedPostgresUser          = "test"
+	sharedPostgresPassword      = "test"
+	sharedPostgresDB            = "testdb"
+)
+
+var (
+	sharedPostgresOnce      sync.Once
+	sharedPostgresContainer *tcppostgres.PostgresContainer
+	sharedPostgresErr       error
+)
+
 func SetupTestPostgres(t *testing.T) (string, *sql.DB) {
+	t.Helper()
+
+	ctx := context.Background()
+	container := setupSharedTestPostgresContainer(t)
+	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	db, err := sql.Open("pgx", connStr)
+	require.NoError(t, err)
+	require.NoError(t, WaitForDB(ctx, db, 30*time.Second))
+
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	return connStr, db
+}
+
+func SetupFreshTestPostgres(t *testing.T) (string, *sql.DB) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -38,6 +71,24 @@ func SetupTestPostgres(t *testing.T) (string, *sql.DB) {
 
 	require.NoError(t, WaitForDB(ctx, db, 30*time.Second))
 	return connStr, db
+}
+
+func setupSharedTestPostgresContainer(t *testing.T) *tcppostgres.PostgresContainer {
+	t.Helper()
+
+	sharedPostgresOnce.Do(func() {
+		sharedPostgresContainer, sharedPostgresErr = tcppostgres.Run(
+			context.Background(),
+			"postgres:16-alpine",
+			tcppostgres.WithDatabase(sharedPostgresDB),
+			tcppostgres.WithUsername(sharedPostgresUser),
+			tcppostgres.WithPassword(sharedPostgresPassword),
+			testcontainers.WithReuseByName(sharedPostgresContainerName),
+		)
+	})
+
+	require.NoError(t, sharedPostgresErr)
+	return sharedPostgresContainer
 }
 
 func WaitForDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {

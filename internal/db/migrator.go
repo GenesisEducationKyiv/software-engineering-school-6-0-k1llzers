@@ -11,12 +11,29 @@ import (
 	"strings"
 )
 
+const migrationsAdvisoryLockKey = int64(725321992)
+
 type migrationFile struct {
 	version string
 	path    string
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB, dir string) error {
+	lockConn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = lockConn.Close()
+	}()
+
+	if _, err := lockConn.ExecContext(ctx, `select pg_advisory_lock($1)`, migrationsAdvisoryLockKey); err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = lockConn.ExecContext(context.Background(), `select pg_advisory_unlock($1)`, migrationsAdvisoryLockKey)
+	}()
+
 	if err := ensureMigrationsTable(ctx, db); err != nil {
 		return err
 	}

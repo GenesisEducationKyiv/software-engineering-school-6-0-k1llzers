@@ -319,13 +319,18 @@ func TestRouter_ExposesMetricsEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := NewRouter(NewSubscriptionHandler(&subscriptionServiceStub{}), newTestMetrics(t))
+
+	apiReq := httptest.NewRequest(http.MethodGet, "/api/unsubscribe/invalid", nil)
+	apiRecorder := httptest.NewRecorder()
+	router.ServeHTTP(apiRecorder, apiReq)
+	require.Equal(t, http.StatusBadRequest, apiRecorder.Code)
+
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	recorder := httptest.NewRecorder()
-
 	router.ServeHTTP(recorder, req)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "github_release_notifier")
+	require.Contains(t, recorder.Body.String(), "github_release_notifier_http_requests_total")
 }
 
 func newTestMetrics(t *testing.T) *appmetrics.Metrics {

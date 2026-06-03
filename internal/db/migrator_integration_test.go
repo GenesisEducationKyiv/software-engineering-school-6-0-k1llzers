@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github-release-notifier/internal/dbtest"
+
 	"github.com/stretchr/testify/require"
 )
 
 func TestRunMigrations_AppliesAndSkipsAlreadyApplied(t *testing.T) {
-	_, db := setupTestPostgres(t)
+	_, db := dbtest.SetupFreshTestPostgres(t)
 	dir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "001_create_alpha.sql"), []byte(`create table alpha (id integer primary key);`), 0o644))
@@ -32,7 +34,7 @@ func TestRunMigrations_AppliesAndSkipsAlreadyApplied(t *testing.T) {
 }
 
 func TestRunMigrations_RollsBackFailedMigration(t *testing.T) {
-	_, db := setupTestPostgres(t)
+	_, db := dbtest.SetupFreshTestPostgres(t)
 	dir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "001_create_alpha.sql"), []byte(`create table alpha (id integer primary key);`), 0o644))

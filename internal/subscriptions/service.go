@@ -1,4 +1,4 @@
-package service
+package subscriptions
 
 import (
 	"context"
@@ -13,7 +13,7 @@ type txManager interface {
 	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-type UserStore interface {
+type userStore interface {
 	CreateIfNotExists(ctx context.Context, email string) (domain.User, error)
 }
 
@@ -21,35 +21,40 @@ type trackedRepositoryCreator interface {
 	CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
 }
 
-type SubscriptionStore interface {
+type subscriptionStore interface {
 	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
 	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
 }
 
-type ConfirmationQueue interface {
+type confirmationQueue interface {
 	QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
 }
 
-type SubscriptionService struct {
-	txManager     txManager
-	users         UserStore
-	repositories  trackedRepositoryCreator
-	subscriptions SubscriptionStore
-	repositoryAPI githubRepositoryClient
-	mailQueue     ConfirmationQueue
+type githubRepositoryClient interface {
+	RepositoryExists(ctx context.Context, owner string, repoName string) error
+	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
 }
 
-func NewSubscriptionService(
+type Service struct {
+	txManager     txManager
+	users         userStore
+	repositories  trackedRepositoryCreator
+	subscriptions subscriptionStore
+	repositoryAPI githubRepositoryClient
+	mailQueue     confirmationQueue
+}
+
+func NewService(
 	txManager txManager,
-	users UserStore,
+	users userStore,
 	repositories trackedRepositoryCreator,
-	subscriptions SubscriptionStore,
+	subscriptions subscriptionStore,
 	repositoryAPI githubRepositoryClient,
-	mailQueue ConfirmationQueue,
-) *SubscriptionService {
-	return &SubscriptionService{
+	mailQueue confirmationQueue,
+) *Service {
+	return &Service{
 		txManager:     txManager,
 		users:         users,
 		repositories:  repositories,
@@ -59,7 +64,7 @@ func NewSubscriptionService(
 	}
 }
 
-func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repositoryFullName string) error {
+func (s *Service) Subscribe(ctx context.Context, email string, repositoryFullName string) error {
 	repository, err := s.prepareSubscription(ctx, repositoryFullName)
 	if err != nil {
 		return err
@@ -85,14 +90,14 @@ func (s *SubscriptionService) Subscribe(ctx context.Context, email string, repos
 	})
 }
 
-func (s *SubscriptionService) ConfirmSubscription(ctx context.Context, token string) error {
+func (s *Service) ConfirmSubscription(ctx context.Context, token string) error {
 	return s.subscriptions.SetConfirmedByTokenAndConfirmedNotTrue(ctx, token)
 }
 
-func (s *SubscriptionService) CancelSubscription(ctx context.Context, token string) error {
+func (s *Service) CancelSubscription(ctx context.Context, token string) error {
 	return s.subscriptions.DeleteByCancellationToken(ctx, token)
 }
 
-func (s *SubscriptionService) ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error) {
+func (s *Service) ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error) {
 	return s.subscriptions.ListByEmail(ctx, email)
 }

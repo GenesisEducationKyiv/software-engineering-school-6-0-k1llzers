@@ -16,6 +16,140 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type trackedRepositoryProviderStub struct {
+	result      domain.TrackedRepository
+	err         error
+	owner       string
+	repoName    string
+	lastSeenTag string
+	updatedID   int64
+	updatedTag  string
+}
+
+func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+	s.owner = owner
+	s.repoName = name
+	s.lastSeenTag = lastSeenTag
+	if s.err != nil {
+		return domain.TrackedRepository{}, s.err
+	}
+
+	return s.result, nil
+}
+
+func (s *trackedRepositoryProviderStub) UpdateLastSeenTag(_ context.Context, trackedRepositoryID int64, lastSeenTag string) error {
+	s.updatedID = trackedRepositoryID
+	s.updatedTag = lastSeenTag
+	return s.err
+}
+
+type transactionManagerStub struct {
+	err        error
+	called     bool
+	committed  bool
+	rolledBack bool
+}
+
+func (s *transactionManagerStub) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	s.called = true
+	err := fn(ctx)
+	if err != nil {
+		s.rolledBack = true
+		return err
+	}
+
+	if s.err != nil {
+		s.rolledBack = true
+		return s.err
+	}
+
+	s.committed = true
+	return nil
+}
+
+type subscriptionCreatorStub struct {
+	result              domain.Subscription
+	listResult          []readmodel.SubscriptionView
+	confirmedList       []readmodel.ConfirmedRepositorySubscription
+	err                 error
+	createdUserID       int64
+	createdRepositoryID int64
+	confirmedToken      string
+	cancellationToken   string
+	listEmail           string
+}
+
+func (s *subscriptionCreatorStub) Create(_ context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
+	s.createdUserID = userID
+	s.createdRepositoryID = trackedRepositoryID
+	if s.err != nil {
+		return domain.Subscription{}, s.err
+	}
+
+	return s.result, nil
+}
+
+func (s *subscriptionCreatorStub) SetConfirmedByTokenAndConfirmedNotTrue(_ context.Context, confirmationToken string) error {
+	s.confirmedToken = confirmationToken
+	if s.err != nil {
+		return s.err
+	}
+
+	return nil
+}
+
+func (s *subscriptionCreatorStub) DeleteByCancellationToken(_ context.Context, cancellationToken string) error {
+	s.cancellationToken = cancellationToken
+	if s.err != nil {
+		return s.err
+	}
+
+	return nil
+}
+
+func (s *subscriptionCreatorStub) ListByEmail(_ context.Context, email string) ([]readmodel.SubscriptionView, error) {
+	s.listEmail = email
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	return s.listResult, nil
+}
+
+func (s *subscriptionCreatorStub) ListConfirmedRepositorySubscriptions(_ context.Context) ([]readmodel.ConfirmedRepositorySubscription, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+
+	return s.confirmedList, nil
+}
+
+type gitRepositoryProviderStub struct {
+	result     domain.Release
+	releaseErr error
+	existsErr  error
+	owner      string
+	repoName   string
+	calls      int
+}
+
+func (s *gitRepositoryProviderStub) RepositoryExists(_ context.Context, owner string, repoName string) error {
+	s.owner = owner
+	s.repoName = repoName
+	return s.existsErr
+}
+
+func (s *gitRepositoryProviderStub) GetLatestRelease(_ context.Context, owner string, repoName string) (domain.Release, error) {
+	s.calls++
+	s.owner = owner
+	s.repoName = repoName
+	if s.releaseErr != nil {
+		return domain.Release{}, s.releaseErr
+	}
+
+	return s.result, nil
+}
+
 func TestReleaseMonitor_CheckOnce_QueuesEmailsAndUpdatesTag(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{}

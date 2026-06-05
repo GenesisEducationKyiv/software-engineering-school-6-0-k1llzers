@@ -1,4 +1,4 @@
-package mail
+package notifications
 
 import (
 	"context"
@@ -22,13 +22,17 @@ type outboxStore interface {
 	Release(ctx context.Context, id int64, lastError string) error
 }
 
+type emailDeliveryGateway interface {
+	Deliver(ctx context.Context, to string, email RenderedEmail) error
+}
+
 type OutboxDispatcher struct {
 	store   outboxStore
-	sender  Sender
+	sender  emailDeliveryGateway
 	metrics *appmetrics.Metrics
 }
 
-func NewOutboxDispatcher(store outboxStore, sender Sender, metricSet *appmetrics.Metrics) *OutboxDispatcher {
+func NewOutboxDispatcher(store outboxStore, sender emailDeliveryGateway, metricSet *appmetrics.Metrics) *OutboxDispatcher {
 	if metricSet == nil {
 		panic("metrics is required")
 	}
@@ -67,7 +71,7 @@ func (d *OutboxDispatcher) Run(ctx context.Context) {
 		}
 
 		processingStartedAt := time.Now()
-		sendErr := d.sender.Send(ctx, email.RecipientEmail, RenderedEmail{
+		sendErr := d.sender.Deliver(ctx, email.RecipientEmail, RenderedEmail{
 			Subject:  email.Subject,
 			HTMLBody: email.HTMLBody,
 		})

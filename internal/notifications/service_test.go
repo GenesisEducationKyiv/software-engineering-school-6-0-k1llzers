@@ -1,6 +1,6 @@
 //go:build unit
 
-package mail
+package notifications
 
 import (
 	"context"

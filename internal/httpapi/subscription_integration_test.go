@@ -17,8 +17,8 @@ import (
 	appdb "github-release-notifier/internal/db"
 	"github-release-notifier/internal/dbtest"
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/mail"
 	appmetrics "github-release-notifier/internal/metrics"
+	"github-release-notifier/internal/notifications"
 	"github-release-notifier/internal/storage"
 	"github-release-notifier/internal/subscriptions"
 
@@ -81,7 +81,7 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	_, db := dbtest.SetupTestPostgres(t)
 	require.NoError(t, appdb.RunMigrations(context.Background(), db, filepath.Join("..", "..", "migrations")))
 
-	renderer, err := mail.NewTemplateRenderer()
+	renderer, err := notifications.NewTemplateRenderer()
 	require.NoError(t, err)
 
 	githubClient := &githubClientFake{
@@ -93,14 +93,14 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	trackedRepositoryStore := storage.NewTrackedRepositoryStore(db)
 	subscriptionStore := storage.NewSubscriptionStore(db)
 	outboxStore := storage.NewOutboxStore(db)
-	mailService := mail.NewService(renderer, outboxStore, "http://example.test/api")
+	notificationService := notifications.NewService(renderer, outboxStore, "http://example.test/api")
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
 		trackedRepositoryStore,
 		subscriptionStore,
 		githubClient,
-		mailService,
+		notificationService,
 	)
 
 	return subscriptionAPIFixture{

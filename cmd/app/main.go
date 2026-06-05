@@ -12,8 +12,9 @@ import (
 	"github-release-notifier/internal/github"
 	"github-release-notifier/internal/httpapi"
 	"github-release-notifier/internal/logging"
-	"github-release-notifier/internal/mail"
 	"github-release-notifier/internal/metrics"
+	"github-release-notifier/internal/notifications"
+	"github-release-notifier/internal/platform/mail/smtp"
 	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
 	"github-release-notifier/internal/subscriptions"
@@ -79,7 +80,7 @@ func main() {
 
 type application struct {
 	router           *gin.Engine
-	outboxDispatcher *mail.OutboxDispatcher
+	outboxDispatcher *notifications.OutboxDispatcher
 	releaseMonitor   *service.ReleaseMonitor
 }
 
@@ -108,31 +109,31 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	subscriptionStore := storage.NewSubscriptionStore(pg)
 	outboxStore := storage.NewOutboxStore(pg)
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
-	templateRenderer, err := mail.NewTemplateRenderer()
+	templateRenderer, err := notifications.NewTemplateRenderer()
 	if err != nil {
 		return nil, err
 	}
 
 	sender := newMailSender(cfg.Mail)
-	mailService := mail.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
+	notificationService := notifications.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
 		trackedRepositoryStore,
 		subscriptionStore,
 		githubClient,
-		mailService,
+		notificationService,
 	)
 
 	return &application{
 		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
-		outboxDispatcher: mail.NewOutboxDispatcher(outboxStore, sender, appMetrics),
+		outboxDispatcher: notifications.NewOutboxDispatcher(outboxStore, sender, appMetrics),
 		releaseMonitor: service.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
 			subscriptionStore,
 			githubClient,
-			mailService,
+			notificationService,
 			appMetrics,
 		),
 	}, nil
@@ -148,8 +149,8 @@ func startBackgroundWorkers(ctx context.Context, workers ...BackgroundWorker) {
 	}
 }
 
-func newMailSender(cfg config.MailConfig) mail.Sender {
-	return mail.NewSMTPSender(mail.SMTPConfig{
+func newMailSender(cfg config.MailConfig) *smtp.Sender {
+	return smtp.NewSender(smtp.Config{
 		Host:     cfg.Host,
 		Port:     cfg.Port,
 		Username: cfg.Username,

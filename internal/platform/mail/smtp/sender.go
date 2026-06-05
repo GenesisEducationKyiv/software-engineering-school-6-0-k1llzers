@@ -1,4 +1,4 @@
-package mail
+package smtp
 
 import (
 	"context"
@@ -7,13 +7,11 @@ import (
 	"net"
 	"net/smtp"
 	"strings"
+
+	"github-release-notifier/internal/notifications"
 )
 
-type Sender interface {
-	Send(ctx context.Context, to string, email RenderedEmail) error
-}
-
-type SMTPConfig struct {
+type Config struct {
 	Host     string
 	Port     int
 	Username string
@@ -21,20 +19,20 @@ type SMTPConfig struct {
 	From     string
 }
 
-type SMTPSender struct {
+type Sender struct {
 	host string
 	port int
 	from string
 	auth smtp.Auth
 }
 
-func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
+func NewSender(cfg Config) *Sender {
 	var auth smtp.Auth
 	if cfg.Username != "" || cfg.Password != "" {
 		auth = smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)
 	}
 
-	return &SMTPSender{
+	return &Sender{
 		host: cfg.Host,
 		port: cfg.Port,
 		from: cfg.From,
@@ -42,7 +40,7 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 	}
 }
 
-func (s *SMTPSender) Send(ctx context.Context, to string, email RenderedEmail) error {
+func (s *Sender) Deliver(ctx context.Context, to string, email notifications.RenderedEmail) error {
 	address := fmt.Sprintf("%s:%d", s.host, s.port)
 
 	dialer := &net.Dialer{}
@@ -100,7 +98,7 @@ func (s *SMTPSender) Send(ctx context.Context, to string, email RenderedEmail) e
 	return nil
 }
 
-func buildMessage(from string, to string, email RenderedEmail) string {
+func buildMessage(from string, to string, email notifications.RenderedEmail) string {
 	headers := []string{
 		"MIME-Version: 1.0",
 		"Content-Type: text/html; charset=UTF-8",

@@ -1,6 +1,6 @@
 //go:build unit
 
-package mail
+package notifications
 
 import (
 	"context"
@@ -59,7 +59,7 @@ type senderStub struct {
 	cancelOnSend context.CancelFunc
 }
 
-func (s *senderStub) Send(_ context.Context, to string, email RenderedEmail) error {
+func (s *senderStub) Deliver(_ context.Context, to string, email RenderedEmail) error {
 	s.calls++
 	s.to = to
 	s.email = email

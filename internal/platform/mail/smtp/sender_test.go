@@ -1,15 +1,17 @@
 //go:build unit
 
-package mail
+package smtp
 
 import (
 	"testing"
+
+	"github-release-notifier/internal/notifications"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewSMTPSender_WithCredentials_CreatesAuth(t *testing.T) {
-	sender := NewSMTPSender(SMTPConfig{
+	sender := NewSender(Config{
 		Host:     "smtp.example.com",
 		Port:     587,
 		Username: "user",
@@ -24,7 +26,7 @@ func TestNewSMTPSender_WithCredentials_CreatesAuth(t *testing.T) {
 }
 
 func TestNewSMTPSender_WithoutCredentials_DoesNotCreateAuth(t *testing.T) {
-	sender := NewSMTPSender(SMTPConfig{
+	sender := NewSender(Config{
 		Host: "smtp.example.com",
 		Port: 25,
 		From: "noreply@example.com",
@@ -34,7 +36,7 @@ func TestNewSMTPSender_WithoutCredentials_DoesNotCreateAuth(t *testing.T) {
 }
 
 func TestBuildMessage(t *testing.T) {
-	message := buildMessage("from@example.com", "to@example.com", RenderedEmail{
+	message := buildMessage("from@example.com", "to@example.com", notifications.RenderedEmail{
 		Subject:  "subject",
 		HTMLBody: "<p>body</p>",
 	})

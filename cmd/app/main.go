@@ -16,6 +16,7 @@ import (
 	"github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
 )
@@ -114,7 +115,7 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 
 	sender := newMailSender(cfg.Mail)
 	mailService := mail.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
-	subscriptionService := service.NewSubscriptionService(
+	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
 		trackedRepositoryStore,

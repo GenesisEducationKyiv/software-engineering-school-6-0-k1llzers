@@ -1,4 +1,4 @@
-package service
+package subscriptions
 
 import (
 	"context"
@@ -8,18 +8,13 @@ import (
 	"github-release-notifier/internal/domain"
 )
 
-type githubRepositoryClient interface {
-	RepositoryExists(ctx context.Context, owner string, repoName string) error
-	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
-}
-
 type subscriptionRepository struct {
 	owner       string
 	name        string
 	lastSeenTag string
 }
 
-func (s *SubscriptionService) prepareSubscription(ctx context.Context, repositoryFullName string) (subscriptionRepository, error) {
+func (s *Service) prepareSubscription(ctx context.Context, repositoryFullName string) (subscriptionRepository, error) {
 	owner, repoName, err := splitRepositoryFullName(repositoryFullName)
 	if err != nil {
 		return subscriptionRepository{}, err
@@ -41,7 +36,7 @@ func (s *SubscriptionService) prepareSubscription(ctx context.Context, repositor
 	}, nil
 }
 
-func (s *SubscriptionService) resolveLastSeenTag(ctx context.Context, owner string, repoName string) (string, error) {
+func (s *Service) resolveLastSeenTag(ctx context.Context, owner string, repoName string) (string, error) {
 	release, err := s.repositoryAPI.GetLatestRelease(ctx, owner, repoName)
 	if err == nil {
 		return release.TagName, nil

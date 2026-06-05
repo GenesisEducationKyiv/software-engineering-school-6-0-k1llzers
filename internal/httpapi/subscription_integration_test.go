@@ -19,8 +19,8 @@ import (
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/mail"
 	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -94,7 +94,7 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	subscriptionStore := storage.NewSubscriptionStore(db)
 	outboxStore := storage.NewOutboxStore(db)
 	mailService := mail.NewService(renderer, outboxStore, "http://example.test/api")
-	subscriptionService := service.NewSubscriptionService(
+	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
 		trackedRepositoryStore,

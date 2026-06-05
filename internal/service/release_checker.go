@@ -19,6 +19,10 @@ const (
 	defaultRateLimitBackoff     = 15 * time.Minute
 )
 
+type txManager interface {
+	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
 type ReleaseMonitor struct {
 	txManager     txManager
 	repositories  trackedRepositoryTagUpdater

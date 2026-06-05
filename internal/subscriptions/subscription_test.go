@@ -1,6 +1,6 @@
 //go:build unit
 
-package service
+package subscriptions
 
 import (
 	"context"
@@ -215,7 +215,7 @@ func TestSubscriptionService_Subscribe_UsesExistingTrackedRepository(t *testing.
 	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
 	mailQueue := &confirmationSenderStub{}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.NoError(t, err)
@@ -244,7 +244,7 @@ func TestSubscriptionService_Subscribe_ReturnsUserStoreError(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{}
 	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -267,7 +267,7 @@ func TestSubscriptionService_Subscribe_AllowsRepositoryWithoutReleases(t *testin
 	}
 	releaseClient := &gitRepositoryProviderStub{releaseErr: domain.ErrNoReleases}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.NoError(t, err)
@@ -282,7 +282,7 @@ func TestSubscriptionService_Subscribe_ReturnsRepositoryValidationError(t *testi
 	subscriptions := &subscriptionCreatorStub{}
 	releaseClient := &gitRepositoryProviderStub{existsErr: expectedErr}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -297,7 +297,7 @@ func TestSubscriptionService_Subscribe_ReturnsLatestReleaseError(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{}
 	releaseClient := &gitRepositoryProviderStub{releaseErr: expectedErr}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -312,7 +312,7 @@ func TestSubscriptionService_Subscribe_ReturnsSubscriptionStoreError(t *testing.
 	subscriptions := &subscriptionCreatorStub{err: expectedErr}
 	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -328,7 +328,7 @@ func TestSubscriptionService_Subscribe_ReturnsRepositoryStoreError(t *testing.T)
 	subscriptions := &subscriptionCreatorStub{}
 	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -343,7 +343,7 @@ func TestSubscriptionService_Subscribe_ReturnsIncorrectRepositoryFormat(t *testi
 	subscriptions := &subscriptionCreatorStub{}
 	releaseClient := &gitRepositoryProviderStub{}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic")
 	require.ErrorIs(t, err, domain.ErrIncorrectRepositoryFormat)
@@ -365,7 +365,7 @@ func TestSubscriptionService_Subscribe_ReturnsConfirmationSenderError(t *testing
 	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
 	mailQueue := &confirmationSenderStub{err: expectedErr}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -389,7 +389,7 @@ func TestSubscriptionService_Subscribe_ReturnsTransactionManagerError(t *testing
 	}
 	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
 
-	service := NewSubscriptionService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
+	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.ErrorIs(t, err, expectedErr)
@@ -399,7 +399,7 @@ func TestSubscriptionService_Subscribe_ReturnsTransactionManagerError(t *testing
 
 func TestSubscriptionService_ConfirmSubscription(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{}
-	service := NewSubscriptionService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
+	service := NewService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
 
 	err := service.ConfirmSubscription(context.Background(), "11111111-1111-1111-1111-111111111111")
 	require.NoError(t, err)
@@ -409,7 +409,7 @@ func TestSubscriptionService_ConfirmSubscription(t *testing.T) {
 func TestSubscriptionService_ConfirmSubscription_ReturnsStoreError(t *testing.T) {
 	expectedErr := errors.New("store failed")
 	subscriptions := &subscriptionCreatorStub{err: expectedErr}
-	service := NewSubscriptionService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
+	service := NewService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
 
 	err := service.ConfirmSubscription(context.Background(), "11111111-1111-1111-1111-111111111111")
 	require.ErrorIs(t, err, expectedErr)
@@ -417,7 +417,7 @@ func TestSubscriptionService_ConfirmSubscription_ReturnsStoreError(t *testing.T)
 
 func TestSubscriptionService_CancelSubscription(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{}
-	service := NewSubscriptionService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
+	service := NewService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
 
 	err := service.CancelSubscription(context.Background(), "22222222-2222-2222-2222-222222222222")
 	require.NoError(t, err)
@@ -427,7 +427,7 @@ func TestSubscriptionService_CancelSubscription(t *testing.T) {
 func TestSubscriptionService_CancelSubscription_ReturnsStoreError(t *testing.T) {
 	expectedErr := errors.New("store failed")
 	subscriptions := &subscriptionCreatorStub{err: expectedErr}
-	service := NewSubscriptionService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
+	service := NewService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
 
 	err := service.CancelSubscription(context.Background(), "22222222-2222-2222-2222-222222222222")
 	require.ErrorIs(t, err, expectedErr)
@@ -439,7 +439,7 @@ func TestSubscriptionService_ListSubscriptions(t *testing.T) {
 			{Email: "test@example.com", Repo: "gin-gonic/gin", Confirmed: true, LastSeenTag: "v1.11.0"},
 		},
 	}
-	service := NewSubscriptionService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
+	service := NewService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
 
 	result, err := service.ListSubscriptions(context.Background(), "test@example.com")
 	require.NoError(t, err)
@@ -451,7 +451,7 @@ func TestSubscriptionService_ListSubscriptions(t *testing.T) {
 func TestSubscriptionService_ListSubscriptions_ReturnsStoreError(t *testing.T) {
 	expectedErr := errors.New("store failed")
 	subscriptions := &subscriptionCreatorStub{err: expectedErr}
-	service := NewSubscriptionService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
+	service := NewService(&transactionManagerStub{}, &userCreatorStub{}, &trackedRepositoryProviderStub{}, subscriptions, &gitRepositoryProviderStub{}, &confirmationSenderStub{})
 
 	result, err := service.ListSubscriptions(context.Background(), "test@example.com")
 	require.ErrorIs(t, err, expectedErr)

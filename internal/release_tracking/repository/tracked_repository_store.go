@@ -16,10 +16,10 @@ func NewTrackedRepositoryStore(db *sql.DB) *TrackedRepositoryStore {
 	return &TrackedRepositoryStore{db: db}
 }
 
-func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (releasetracking.TrackedRepository, error) {
+func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner string, name string) (releasetracking.TrackedRepository, error) {
 	query := `
-		insert into tracked_repositories (owner, name, last_seen_tag)
-		values ($1, $2, $3)
+		insert into tracked_repositories (owner, name)
+		values ($1, $2)
 		on conflict (owner, name) 
 		do update 
 		    set updated_at = now()
@@ -27,17 +27,22 @@ func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner st
 	`
 
 	var created releasetracking.TrackedRepository
+	var lastSeenTag sql.NullString
 
-	err := appdb.NewQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, owner, name, lastSeenTag).Scan(
+	err := appdb.NewQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, owner, name).Scan(
 		&created.ID,
 		&created.Owner,
 		&created.Name,
-		&created.LastSeenTag,
+		&lastSeenTag,
 		&created.CreatedAt,
 		&created.UpdatedAt,
 	)
 	if err != nil {
 		return releasetracking.TrackedRepository{}, err
+	}
+
+	if lastSeenTag.Valid {
+		created.LastSeenTag = new(lastSeenTag.String)
 	}
 
 	return created, nil

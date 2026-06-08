@@ -17,7 +17,7 @@ type userStore interface {
 }
 
 type trackedRepositoryCreator interface {
-	CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (releasetracking.TrackedRepository, error)
+	CreateIfNotExists(ctx context.Context, owner string, name string) (releasetracking.TrackedRepository, error)
 }
 
 type subscriptionStore interface {
@@ -33,7 +33,6 @@ type confirmationQueue interface {
 
 type githubRepositoryClient interface {
 	RepositoryExists(ctx context.Context, owner string, repoName string) error
-	GetLatestRelease(ctx context.Context, owner string, repoName string) (releasetracking.Release, error)
 }
 
 type Service struct {
@@ -75,7 +74,7 @@ func (s *Service) Subscribe(ctx context.Context, email string, repositoryFullNam
 			return err
 		}
 
-		trackedRepository, err := s.repositories.CreateIfNotExists(ctx, repository.owner, repository.name, repository.lastSeenTag)
+		trackedRepository, err := s.repositories.CreateIfNotExists(ctx, repository.owner, repository.name)
 		if err != nil {
 			return err
 		}

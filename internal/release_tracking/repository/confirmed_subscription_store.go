@@ -21,7 +21,7 @@ func (s *ConfirmedSubscriptionStore) ListConfirmedRepositorySubscriptions(ctx co
 			tr.id,
 			tr.owner,
 			tr.name,
-			coalesce(tr.last_seen_tag, ''),
+			tr.last_seen_tag,
 			u.email,
 			s.cancellation_token
 		from subscriptions s
@@ -42,15 +42,21 @@ func (s *ConfirmedSubscriptionStore) ListConfirmedRepositorySubscriptions(ctx co
 	var subscriptions []releasetracking.ConfirmedRepositorySubscription
 	for rows.Next() {
 		var item releasetracking.ConfirmedRepositorySubscription
+		var lastSeenTag sql.NullString
 		if err := rows.Scan(
 			&item.TrackedRepositoryID,
 			&item.Owner,
 			&item.Name,
-			&item.LastSeenTag,
+			&lastSeenTag,
 			&item.Email,
 			&item.CancellationToken,
 		); err != nil {
 			return nil, err
+		}
+
+		if lastSeenTag.Valid {
+			value := lastSeenTag.String
+			item.LastSeenTag = &value
 		}
 
 		subscriptions = append(subscriptions, item)

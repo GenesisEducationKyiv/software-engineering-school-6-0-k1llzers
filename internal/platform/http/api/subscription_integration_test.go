@@ -135,7 +135,9 @@ func TestSubscriptionAPI_SubscribeQueuesConfirmationEmail(t *testing.T) {
 	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
 	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
-	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "v1.11.0")
+	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
+	require.Equal(t, 1, fixture.githubClient.repositoryExistsCalls)
+	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
 
 	tokens := requireSubscriptionTokens(t, fixture.db, data.Email, data.Repo)
 	requireOutboxEmail(t, fixture.db, data.Email, outboxRow{
@@ -164,16 +166,21 @@ func TestSubscriptionAPI_SubscribeDuplicateDoesNotQueueSecondEmail(t *testing.T)
 	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
 }
 
-func TestSubscriptionAPI_SubscribeGitHubErrorDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
+func TestSubscriptionAPI_Subscribe_IgnoresLatestReleaseLookupError(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
 	fixture.githubClient.releaseErr = shared.ErrRateLimited
 
 	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
-	require.Equal(t, http.StatusServiceUnavailable, response.Code)
-	require.JSONEq(t, `{"error":"github is temporarily unavailable, please try again later"}`, response.Body.String())
-	requireNoBusinessDataOrOutbox(t, fixture.db, data)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, 1, fixture.githubClient.repositoryExistsCalls)
+	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
+	requireUserRowCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
+	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
+	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
 }
 
 func TestSubscriptionAPI_SubscribeRepositoryNotFoundDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
@@ -204,7 +211,7 @@ func TestSubscriptionAPI_SubscribeRepositoryExistsRateLimitedDoesNotPersistBusin
 	requireNoBusinessDataOrOutbox(t, fixture.db, data)
 }
 
-func TestSubscriptionAPI_SubscribeRepositoryWithoutReleasesCreatesSubscriptionWithEmptyLastSeenTag(t *testing.T) {
+func TestSubscriptionAPI_Subscribe_DoesNotInitializeCursorFromLatestRelease(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
 	fixture.githubClient.releaseErr = releasetracking.ErrNoReleases
@@ -217,6 +224,7 @@ func TestSubscriptionAPI_SubscribeRepositoryWithoutReleasesCreatesSubscriptionWi
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
 	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
 	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
+	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
 }
 
 func TestSubscriptionAPI_SubscribeIncorrectRepositoryFormatDoesNotCallGitHubOrPersistData(t *testing.T) {
@@ -245,7 +253,7 @@ func TestSubscriptionAPI_ListReturnsSubscriptions(t *testing.T) {
 			Email:       data.Email,
 			Repo:        data.Repo,
 			Confirmed:   false,
-			LastSeenTag: "v1.11.0",
+			LastSeenTag: "",
 		},
 	})
 }
@@ -285,7 +293,7 @@ func TestSubscriptionAPI_ConfirmSubscription(t *testing.T) {
 			Email:       data.Email,
 			Repo:        data.Repo,
 			Confirmed:   true,
-			LastSeenTag: "v1.11.0",
+			LastSeenTag: "",
 		},
 	})
 }

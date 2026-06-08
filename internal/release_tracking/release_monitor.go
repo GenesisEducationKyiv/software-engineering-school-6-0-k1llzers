@@ -132,7 +132,7 @@ type confirmedSubscriptionGroup struct {
 	trackedRepositoryID int64
 	owner               string
 	name                string
-	lastSeenTag         string
+	lastSeenTag         *string
 	subscriptions       []ConfirmedRepositorySubscription
 }
 
@@ -146,12 +146,28 @@ func (m *ReleaseMonitor) processRepositoryRelease(ctx context.Context, group con
 		return mapLatestReleaseError(group, err)
 	}
 
+	if !group.hasInitializedCursor() {
+		return m.initializeLastSeenTag(ctx, group, release.TagName)
+	}
+
 	if !group.shouldNotify(release.TagName) {
 		return nil
 	}
 
 	if err := m.queueReleaseNotifications(ctx, group, release); err != nil {
 		return fmt.Errorf("%s enqueue: %w", group.fullName(), err)
+	}
+
+	return nil
+}
+
+func (m *ReleaseMonitor) initializeLastSeenTag(ctx context.Context, group confirmedSubscriptionGroup, tagName string) error {
+	if tagName == "" {
+		return nil
+	}
+
+	if err := m.repositories.UpdateLastSeenTag(ctx, group.trackedRepositoryID, tagName); err != nil {
+		return fmt.Errorf("%s initialize cursor: %w", group.fullName(), err)
 	}
 
 	return nil
@@ -180,7 +196,11 @@ func (m *ReleaseMonitor) queueReleaseNotifications(ctx context.Context, group co
 }
 
 func (g confirmedSubscriptionGroup) shouldNotify(tagName string) bool {
-	return tagName != "" && tagName != g.lastSeenTag
+	return tagName != "" && g.lastSeenTag != nil && tagName != *g.lastSeenTag
+}
+
+func (g confirmedSubscriptionGroup) hasInitializedCursor() bool {
+	return g.lastSeenTag != nil
 }
 
 func groupConfirmedSubscriptions(items []ConfirmedRepositorySubscription) []confirmedSubscriptionGroup {

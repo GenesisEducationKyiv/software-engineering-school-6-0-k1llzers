@@ -12,7 +12,7 @@ import (
 
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/readmodel"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -24,10 +24,10 @@ type subscriptionServiceStub struct {
 	repositoryFullName string
 	confirmationToken  string
 	cancellationToken  string
-	listResult         []readmodel.SubscriptionView
+	listResult         []subscriptions.SubscriptionView
 }
 
-func (s *subscriptionServiceStub) Subscribe(ctx context.Context, email string, repositoryFullName string) error {
+func (s *subscriptionServiceStub) Subscribe(_ context.Context, email string, repositoryFullName string) error {
 	s.email = email
 	s.repositoryFullName = repositoryFullName
 	if s.err != nil {
@@ -55,7 +55,7 @@ func (s *subscriptionServiceStub) CancelSubscription(_ context.Context, token st
 	return nil
 }
 
-func (s *subscriptionServiceStub) ListSubscriptions(_ context.Context, email string) ([]readmodel.SubscriptionView, error) {
+func (s *subscriptionServiceStub) ListSubscriptions(_ context.Context, email string) ([]subscriptions.SubscriptionView, error) {
 	s.email = email
 	if s.err != nil {
 		return nil, s.err
@@ -101,7 +101,7 @@ func TestSubscriptionHandler_List(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	service := &subscriptionServiceStub{
-		listResult: []readmodel.SubscriptionView{
+		listResult: []subscriptions.SubscriptionView{
 			{
 				Email:       "test@example.com",
 				Repo:        "gin-gonic/gin",

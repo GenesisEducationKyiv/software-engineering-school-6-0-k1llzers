@@ -1,10 +1,11 @@
-package storage
+package repository
 
 import (
 	"context"
 	"database/sql"
 
-	"github-release-notifier/internal/domain"
+	appdb "github-release-notifier/internal/platform/db"
+	releasetracking "github-release-notifier/internal/release_tracking"
 )
 
 type TrackedRepositoryStore struct {
@@ -15,7 +16,7 @@ func NewTrackedRepositoryStore(db *sql.DB) *TrackedRepositoryStore {
 	return &TrackedRepositoryStore{db: db}
 }
 
-func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (releasetracking.TrackedRepository, error) {
 	query := `
 		insert into tracked_repositories (owner, name, last_seen_tag)
 		values ($1, $2, $3)
@@ -25,9 +26,9 @@ func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner st
 		returning id, owner, name, last_seen_tag, created_at, updated_at
 	`
 
-	var created domain.TrackedRepository
+	var created releasetracking.TrackedRepository
 
-	err := newQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, owner, name, lastSeenTag).Scan(
+	err := appdb.NewQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, owner, name, lastSeenTag).Scan(
 		&created.ID,
 		&created.Owner,
 		&created.Name,
@@ -36,7 +37,7 @@ func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner st
 		&created.UpdatedAt,
 	)
 	if err != nil {
-		return domain.TrackedRepository{}, err
+		return releasetracking.TrackedRepository{}, err
 	}
 
 	return created, nil
@@ -50,6 +51,6 @@ func (s *TrackedRepositoryStore) UpdateLastSeenTag(ctx context.Context, trackedR
 		where id = $1;
 	`
 
-	_, err := newQueryExecutor(ctx, s.db).ExecContext(ctx, query, trackedRepositoryID, lastSeenTag)
+	_, err := appdb.NewQueryExecutor(ctx, s.db).ExecContext(ctx, query, trackedRepositoryID, lastSeenTag)
 	return err
 }

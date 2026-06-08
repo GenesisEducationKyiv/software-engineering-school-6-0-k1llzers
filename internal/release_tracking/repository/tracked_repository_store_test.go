@@ -1,22 +1,23 @@
 //go:build integration
 
-package storage
+package repository
 
 import (
 	"context"
+	"github-release-notifier/internal/dbtest"
 	"testing"
 
-	dbtx "github-release-notifier/internal/db"
+	dbtx "github-release-notifier/internal/platform/db"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestTrackedRepositoryStore_CreateIfNotExists_CreatesRepository(t *testing.T) {
-	db := setupTestDB(t)
+	db := dbtest.SetupTestDB(t)
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	repository := newTestRepository()
+	repository := dbtest.NewTestRepository()
 	created, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name, "v1.0.0")
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
@@ -27,11 +28,11 @@ func TestTrackedRepositoryStore_CreateIfNotExists_CreatesRepository(t *testing.T
 }
 
 func TestTrackedRepositoryStore_CreateIfNotExists_ReturnsExistingRepositoryWithoutOverwritingTag(t *testing.T) {
-	db := setupTestDB(t)
+	db := dbtest.SetupTestDB(t)
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	repository := newTestRepository()
+	repository := dbtest.NewTestRepository()
 	first, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name, "v1.0.0")
 	require.NoError(t, err)
 
@@ -44,11 +45,11 @@ func TestTrackedRepositoryStore_CreateIfNotExists_ReturnsExistingRepositoryWitho
 }
 
 func TestTrackedRepositoryStore_UpdateLastSeenTag_UpdatesRepository(t *testing.T) {
-	db := setupTestDB(t)
+	db := dbtest.SetupTestDB(t)
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	testRepository := newTestRepository()
+	testRepository := dbtest.NewTestRepository()
 	repository, err := store.CreateIfNotExists(ctx, testRepository.Owner, testRepository.Name, "")
 	require.NoError(t, err)
 
@@ -62,14 +63,14 @@ func TestTrackedRepositoryStore_UpdateLastSeenTag_UpdatesRepository(t *testing.T
 }
 
 func TestTrackedRepositoryStore_MethodsUseTransaction(t *testing.T) {
-	db := setupTestDB(t)
+	db := dbtest.SetupTestDB(t)
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	tx := beginTestTx(t, db)
+	tx := dbtest.BeginTestTx(t, db)
 
 	txCtx := dbtx.WithTransactionContext(ctx, tx)
-	testRepository := newTestRepository()
+	testRepository := dbtest.NewTestRepository()
 	repository, err := store.CreateIfNotExists(txCtx, testRepository.Owner, testRepository.Name, "")
 	require.NoError(t, err)
 

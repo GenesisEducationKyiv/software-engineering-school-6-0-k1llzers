@@ -1,4 +1,4 @@
-package storage
+package repository
 
 import (
 	"context"
@@ -6,7 +6,8 @@ import (
 	"errors"
 
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/readmodel"
+	appdb "github-release-notifier/internal/platform/db"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -19,16 +20,16 @@ func NewSubscriptionStore(db *sql.DB) *SubscriptionStore {
 	return &SubscriptionStore{db: db}
 }
 
-func (s *SubscriptionStore) Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
+func (s *SubscriptionStore) Create(ctx context.Context, userID int64, trackedRepositoryID int64) (subscriptions.Subscription, error) {
 	query := `
 		insert into subscriptions (user_id, tracked_repository_id)
 		values ($1, $2)
 		returning id, user_id, tracked_repository_id, confirmed, confirmation_token, cancellation_token, created_at, updated_at;
 	`
 
-	var created domain.Subscription
+	var created subscriptions.Subscription
 
-	err := newQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, userID, trackedRepositoryID).Scan(
+	err := appdb.NewQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, userID, trackedRepositoryID).Scan(
 		&created.ID,
 		&created.UserID,
 		&created.TrackedRepositoryID,
@@ -41,10 +42,10 @@ func (s *SubscriptionStore) Create(ctx context.Context, userID int64, trackedRep
 
 	if err != nil {
 		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
-			return domain.Subscription{}, domain.ErrAlreadyExists
+			return subscriptions.Subscription{}, domain.ErrAlreadyExists
 		}
 
-		return domain.Subscription{}, err
+		return subscriptions.Subscription{}, err
 	}
 
 	return created, nil
@@ -106,7 +107,7 @@ func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cance
 	return nil
 }
 
-func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error) {
+func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]subscriptions.SubscriptionView, error) {
 	query := `
 		select
 			u.email,
@@ -128,9 +129,9 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]re
 		_ = rows.Close()
 	}()
 
-	var subscriptions []readmodel.SubscriptionView
+	var subscriptionsView []subscriptions.SubscriptionView
 	for rows.Next() {
-		var item readmodel.SubscriptionView
+		var item subscriptions.SubscriptionView
 		if err := rows.Scan(
 			&item.Email,
 			&item.Repo,
@@ -140,60 +141,12 @@ func (s *SubscriptionStore) ListByEmail(ctx context.Context, email string) ([]re
 			return nil, err
 		}
 
-		subscriptions = append(subscriptions, item)
+		subscriptionsView = append(subscriptionsView, item)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	return subscriptions, nil
-}
-
-func (s *SubscriptionStore) ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error) {
-	query := `
-		select
-			tr.id,
-			tr.owner,
-			tr.name,
-			coalesce(tr.last_seen_tag, ''),
-			u.email,
-			s.cancellation_token
-		from subscriptions s
-		join users u on u.id = s.user_id
-		join tracked_repositories tr on tr.id = s.tracked_repository_id
-		where s.confirmed = true
-		order by tr.id, u.email;
-	`
-
-	rows, err := s.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	var subscriptions []readmodel.ConfirmedRepositorySubscription
-	for rows.Next() {
-		var item readmodel.ConfirmedRepositorySubscription
-		if err := rows.Scan(
-			&item.TrackedRepositoryID,
-			&item.Owner,
-			&item.Name,
-			&item.LastSeenTag,
-			&item.Email,
-			&item.CancellationToken,
-		); err != nil {
-			return nil, err
-		}
-
-		subscriptions = append(subscriptions, item)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return subscriptions, nil
+	return subscriptionsView, nil
 }

@@ -10,14 +10,13 @@ import (
 
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/readmodel"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 type trackedRepositoryProviderStub struct {
-	result      domain.TrackedRepository
+	result      TrackedRepository
 	err         error
 	owner       string
 	repoName    string
@@ -26,12 +25,12 @@ type trackedRepositoryProviderStub struct {
 	updatedTag  string
 }
 
-func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (TrackedRepository, error) {
 	s.owner = owner
 	s.repoName = name
 	s.lastSeenTag = lastSeenTag
 	if s.err != nil {
-		return domain.TrackedRepository{}, s.err
+		return TrackedRepository{}, s.err
 	}
 
 	return s.result, nil
@@ -68,55 +67,11 @@ func (s *transactionManagerStub) WithinTransaction(ctx context.Context, fn func(
 }
 
 type subscriptionCreatorStub struct {
-	result              domain.Subscription
-	listResult          []readmodel.SubscriptionView
-	confirmedList       []readmodel.ConfirmedRepositorySubscription
-	err                 error
-	createdUserID       int64
-	createdRepositoryID int64
-	confirmedToken      string
-	cancellationToken   string
-	listEmail           string
+	confirmedList []ConfirmedRepositorySubscription
+	err           error
 }
 
-func (s *subscriptionCreatorStub) Create(_ context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
-	s.createdUserID = userID
-	s.createdRepositoryID = trackedRepositoryID
-	if s.err != nil {
-		return domain.Subscription{}, s.err
-	}
-
-	return s.result, nil
-}
-
-func (s *subscriptionCreatorStub) SetConfirmedByTokenAndConfirmedNotTrue(_ context.Context, confirmationToken string) error {
-	s.confirmedToken = confirmationToken
-	if s.err != nil {
-		return s.err
-	}
-
-	return nil
-}
-
-func (s *subscriptionCreatorStub) DeleteByCancellationToken(_ context.Context, cancellationToken string) error {
-	s.cancellationToken = cancellationToken
-	if s.err != nil {
-		return s.err
-	}
-
-	return nil
-}
-
-func (s *subscriptionCreatorStub) ListByEmail(_ context.Context, email string) ([]readmodel.SubscriptionView, error) {
-	s.listEmail = email
-	if s.err != nil {
-		return nil, s.err
-	}
-
-	return s.listResult, nil
-}
-
-func (s *subscriptionCreatorStub) ListConfirmedRepositorySubscriptions(_ context.Context) ([]readmodel.ConfirmedRepositorySubscription, error) {
+func (s *subscriptionCreatorStub) ListConfirmedRepositorySubscriptions(_ context.Context) ([]ConfirmedRepositorySubscription, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -125,7 +80,7 @@ func (s *subscriptionCreatorStub) ListConfirmedRepositorySubscriptions(_ context
 }
 
 type gitRepositoryProviderStub struct {
-	result     domain.Release
+	result     Release
 	releaseErr error
 	existsErr  error
 	owner      string
@@ -139,12 +94,12 @@ func (s *gitRepositoryProviderStub) RepositoryExists(_ context.Context, owner st
 	return s.existsErr
 }
 
-func (s *gitRepositoryProviderStub) GetLatestRelease(_ context.Context, owner string, repoName string) (domain.Release, error) {
+func (s *gitRepositoryProviderStub) GetLatestRelease(_ context.Context, owner string, repoName string) (Release, error) {
 	s.calls++
 	s.owner = owner
 	s.repoName = repoName
 	if s.releaseErr != nil {
-		return domain.Release{}, s.releaseErr
+		return Release{}, s.releaseErr
 	}
 
 	return s.result, nil
@@ -154,7 +109,7 @@ func TestReleaseMonitor_CheckOnce_QueuesEmailsAndUpdatesTag(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{}
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -174,7 +129,7 @@ func TestReleaseMonitor_CheckOnce_QueuesEmailsAndUpdatesTag(t *testing.T) {
 		},
 	}
 	gitRepositories := &gitRepositoryProviderStub{
-		result: domain.Release{TagName: "v1.11.0"},
+		result: Release{TagName: "v1.11.0"},
 	}
 	notifications := &notificationQueueFactoryStub{}
 
@@ -203,7 +158,7 @@ func TestReleaseMonitor_CheckOnce_SkipsSameTag(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{}
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -215,7 +170,7 @@ func TestReleaseMonitor_CheckOnce_SkipsSameTag(t *testing.T) {
 		},
 	}
 	gitRepositories := &gitRepositoryProviderStub{
-		result: domain.Release{TagName: "v1.11.0"},
+		result: Release{TagName: "v1.11.0"},
 	}
 	notifications := &notificationQueueFactoryStub{}
 
@@ -238,7 +193,7 @@ func TestReleaseMonitor_CheckOnce_SkipsSameTag(t *testing.T) {
 func TestReleaseMonitor_CheckOnce_ReturnsTransactionError(t *testing.T) {
 	expectedErr := errors.New("queue failed")
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -253,7 +208,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsTransactionError(t *testing.T) {
 		&transactionManagerStub{},
 		&trackedRepositoryProviderStub{},
 		subscriptions,
-		&gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}},
+		&gitRepositoryProviderStub{result: Release{TagName: "v1.11.0"}},
 		&notificationQueueFactoryStub{queueErr: expectedErr},
 		newTestMetrics(t),
 	)
@@ -281,7 +236,7 @@ func TestReleaseMonitor_CheckOnce_SkipsRepositoryWithoutReleases(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{}
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -312,7 +267,7 @@ func TestReleaseMonitor_CheckOnce_SkipsRepositoryWithoutReleases(t *testing.T) {
 
 func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -350,7 +305,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 
 func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -389,7 +344,7 @@ func TestReleaseMonitor_CheckOnce_UsesReleaseHTMLURLWhenPresent(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{}
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -401,7 +356,7 @@ func TestReleaseMonitor_CheckOnce_UsesReleaseHTMLURLWhenPresent(t *testing.T) {
 		},
 	}
 	gitRepositories := &gitRepositoryProviderStub{
-		result: domain.Release{
+		result: Release{
 			TagName: "v1.11.0",
 			HTMLURL: "https://example.com/custom-release-url",
 		},
@@ -428,7 +383,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsUpdateLastSeenTagError(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	trackedRepositories := &trackedRepositoryProviderStub{err: expectedErr}
 	subscriptions := &subscriptionCreatorStub{
-		confirmedList: []readmodel.ConfirmedRepositorySubscription{
+		confirmedList: []ConfirmedRepositorySubscription{
 			{
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
@@ -444,7 +399,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsUpdateLastSeenTagError(t *testing.T) {
 		transactionManager,
 		trackedRepositories,
 		subscriptions,
-		&gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}},
+		&gitRepositoryProviderStub{result: Release{TagName: "v1.11.0"}},
 		&notificationQueueFactoryStub{},
 		newTestMetrics(t),
 	)
@@ -454,7 +409,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsUpdateLastSeenTagError(t *testing.T) {
 }
 
 func TestGroupConfirmedSubscriptions(t *testing.T) {
-	items := []readmodel.ConfirmedRepositorySubscription{
+	items := []ConfirmedRepositorySubscription{
 		{
 			TrackedRepositoryID: 10,
 			Owner:               "gin-gonic",

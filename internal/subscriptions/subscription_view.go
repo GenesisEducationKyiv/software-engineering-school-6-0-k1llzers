@@ -1,4 +1,4 @@
-package readmodel
+package subscriptions
 
 type SubscriptionView struct {
 	Email       string

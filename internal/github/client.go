@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github-release-notifier/internal/domain"
+	"github-release-notifier/internal/release_tracking"
 )
 
 const defaultBaseURL = "https://api.github.com"
@@ -57,25 +57,25 @@ func (c *Client) RepositoryExists(ctx context.Context, owner string, repoName st
 	return c.api.mapRepositoryExistsStatus(resp.StatusCode)
 }
 
-func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error) {
+func (c *Client) GetLatestRelease(ctx context.Context, owner string, repoName string) (releasetracking.Release, error) {
 	resp, err := c.doRequest(ctx, http.MethodGet, c.api.latestReleaseURL(c.baseURL, owner, repoName))
 	if err != nil {
-		return domain.Release{}, err
+		return releasetracking.Release{}, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 
 	if err := c.api.mapLatestReleaseStatus(resp.StatusCode); err != nil {
-		return domain.Release{}, err
+		return releasetracking.Release{}, err
 	}
 
 	var payload latestReleaseResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return domain.Release{}, err
+		return releasetracking.Release{}, err
 	}
 
-	return domain.Release{
+	return releasetracking.Release{
 		TagName:     payload.TagName,
 		Name:        payload.Name,
 		HTMLURL:     payload.HTMLURL,

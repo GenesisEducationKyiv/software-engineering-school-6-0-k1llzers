@@ -14,13 +14,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	appdb "github-release-notifier/internal/db"
 	"github-release-notifier/internal/dbtest"
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/notifications"
-	"github-release-notifier/internal/storage"
+	notificationsrepo "github-release-notifier/internal/notifications/repository"
+	appdb "github-release-notifier/internal/platform/db"
+	releasetracking "github-release-notifier/internal/release_tracking"
+	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
 	"github-release-notifier/internal/subscriptions"
+	subscriptionsrepo "github-release-notifier/internal/subscriptions/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -35,7 +38,7 @@ type subscriptionAPIFixture struct {
 
 type githubClientFake struct {
 	existsErr             error
-	release               domain.Release
+	release               releasetracking.Release
 	releaseErr            error
 	repositoryExistsCalls int
 	latestReleaseCalls    int
@@ -46,10 +49,10 @@ func (f *githubClientFake) RepositoryExists(_ context.Context, _ string, _ strin
 	return f.existsErr
 }
 
-func (f *githubClientFake) GetLatestRelease(_ context.Context, _ string, _ string) (domain.Release, error) {
+func (f *githubClientFake) GetLatestRelease(_ context.Context, _ string, _ string) (releasetracking.Release, error) {
 	f.latestReleaseCalls++
 	if f.releaseErr != nil {
-		return domain.Release{}, f.releaseErr
+		return releasetracking.Release{}, f.releaseErr
 	}
 
 	return f.release, nil
@@ -85,14 +88,14 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	require.NoError(t, err)
 
 	githubClient := &githubClientFake{
-		release: domain.Release{TagName: "v1.11.0"},
+		release: releasetracking.Release{TagName: "v1.11.0"},
 	}
 
 	transactionManager := appdb.NewTransactionManager(db)
-	userStore := storage.NewUserStore(db)
-	trackedRepositoryStore := storage.NewTrackedRepositoryStore(db)
-	subscriptionStore := storage.NewSubscriptionStore(db)
-	outboxStore := storage.NewOutboxStore(db)
+	userStore := subscriptionsrepo.NewUserStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
+	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(db)
+	outboxStore := notificationsrepo.NewOutboxStore(db)
 	notificationService := notifications.NewService(renderer, outboxStore, "http://example.test/api")
 	subscriptionService := subscriptions.NewService(
 		transactionManager,

@@ -7,8 +7,6 @@ import (
 	"errors"
 	"testing"
 
-	"github-release-notifier/internal/outbox"
-
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -35,11 +33,11 @@ func (s *rendererStub) Render(kind string, data any) (RenderedEmail, error) {
 type outboxWriterStub struct {
 	err            error
 	recipientEmail string
-	email          outbox.Email
+	email          Email
 	called         bool
 }
 
-func (s *outboxWriterStub) Create(_ context.Context, recipientEmail string, email outbox.Email) error {
+func (s *outboxWriterStub) Create(_ context.Context, recipientEmail string, email Email) error {
 	s.called = true
 	s.recipientEmail = recipientEmail
 	s.email = email
@@ -69,7 +67,7 @@ func TestService_QueueSubscriptionConfirmation(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, outboxStore.called)
 	require.Equal(t, "user@example.com", outboxStore.recipientEmail)
-	require.Equal(t, outbox.Email{Subject: "Confirm subscription", HTMLBody: "<p>body</p>"}, outboxStore.email)
+	require.Equal(t, Email{Subject: "Confirm subscription", HTMLBody: "<p>body</p>"}, outboxStore.email)
 	confirmationData := renderer.data[templateKindConfirmation].(ConfirmationTemplateData)
 	require.Equal(t, "gin-gonic/gin", confirmationData.RepositoryFullName)
 	require.Equal(t, "http://localhost:8080/api/confirm/11111111-1111-1111-1111-111111111111", confirmationData.ConfirmationURL)
@@ -135,7 +133,7 @@ func TestService_QueueReleaseNotification(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, outboxStore.called)
-	require.Equal(t, outbox.Email{Subject: "New release", HTMLBody: "<p>release</p>"}, outboxStore.email)
+	require.Equal(t, Email{Subject: "New release", HTMLBody: "<p>release</p>"}, outboxStore.email)
 	releaseData := renderer.data[templateKindRelease].(ReleaseTemplateData)
 	require.Equal(t, "gin-gonic/gin", releaseData.RepositoryFullName)
 	require.Equal(t, "v1.11.0", releaseData.TagName)

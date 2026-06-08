@@ -1,4 +1,4 @@
-package storage
+package repository
 
 import (
 	"context"
@@ -6,7 +6,8 @@ import (
 	"errors"
 
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/outbox"
+	"github-release-notifier/internal/notifications"
+	appdb "github-release-notifier/internal/platform/db"
 )
 
 type OutboxStore struct {
@@ -17,17 +18,17 @@ func NewOutboxStore(db *sql.DB) *OutboxStore {
 	return &OutboxStore{db: db}
 }
 
-func (s *OutboxStore) Create(ctx context.Context, recipientEmail string, email outbox.Email) error {
+func (s *OutboxStore) Create(ctx context.Context, recipientEmail string, email notifications.Email) error {
 	query := `
 		insert into mail_outbox (recipient_email, subject, html_body)
 		values ($1, $2, $3);
 	`
 
-	_, err := newQueryExecutor(ctx, s.db).ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
+	_, err := appdb.NewQueryExecutor(ctx, s.db).ExecContext(ctx, query, recipientEmail, email.Subject, email.HTMLBody)
 	return err
 }
 
-func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (outbox.Email, error) {
+func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (notifications.Email, error) {
 	query := `
 		with candidate as (
 			select id
@@ -50,7 +51,7 @@ func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSec
 		returning o.id, o.recipient_email, o.subject, o.html_body, o.attempts, o.processing_started_at, o.sent_at, o.last_error, o.created_at, o.updated_at;
 	`
 
-	var result outbox.Email
+	var result notifications.Email
 	err := s.db.QueryRowContext(ctx, query, processingTimeoutSeconds).Scan(
 		&result.ID,
 		&result.RecipientEmail,
@@ -65,10 +66,10 @@ func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSec
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return outbox.Email{}, domain.ErrNotFound
+			return notifications.Email{}, domain.ErrNotFound
 		}
 
-		return outbox.Email{}, err
+		return notifications.Email{}, err
 	}
 
 	return result, nil

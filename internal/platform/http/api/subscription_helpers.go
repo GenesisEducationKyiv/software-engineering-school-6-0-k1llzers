@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/mail"
 
-	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/rules"
+	"github-release-notifier/internal/platform/rules"
+	"github-release-notifier/internal/shared"
 	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
@@ -64,10 +64,10 @@ func withStaticMessage(status int, message string) func(error) errorResponse {
 
 var subscriptionCreateErrorResponder = newErrorResponder(
 	[]rules.Rule[error, errorResponse]{
-		{Match: matchDomainError(domain.ErrIncorrectRepositoryFormat), Handle: withErrorMessage(http.StatusBadRequest)},
-		{Match: matchDomainError(domain.ErrAlreadyExists), Handle: withErrorMessage(http.StatusConflict)},
-		{Match: matchDomainError(domain.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
-		{Match: matchDomainError(domain.ErrRateLimited), Handle: withStaticMessage(http.StatusServiceUnavailable, "github is temporarily unavailable, please try again later")},
+		{Match: matchDomainError(subscriptions.ErrIncorrectRepositoryFormat), Handle: withErrorMessage(http.StatusBadRequest)},
+		{Match: matchDomainError(subscriptions.ErrAlreadyExists), Handle: withErrorMessage(http.StatusConflict)},
+		{Match: matchDomainError(shared.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
+		{Match: matchDomainError(shared.ErrRateLimited), Handle: withStaticMessage(http.StatusServiceUnavailable, "github is temporarily unavailable, please try again later")},
 	},
 	http.StatusInternalServerError,
 	"internal server error",
@@ -75,8 +75,8 @@ var subscriptionCreateErrorResponder = newErrorResponder(
 
 var subscriptionConfirmErrorResponder = newErrorResponder(
 	[]rules.Rule[error, errorResponse]{
-		{Match: matchDomainError(domain.ErrInvalidToken), Handle: withErrorMessage(http.StatusBadRequest)},
-		{Match: matchDomainError(domain.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
+		{Match: matchDomainError(subscriptions.ErrInvalidToken), Handle: withErrorMessage(http.StatusBadRequest)},
+		{Match: matchDomainError(shared.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
 	},
 	http.StatusInternalServerError,
 	"internal server error",
@@ -84,7 +84,7 @@ var subscriptionConfirmErrorResponder = newErrorResponder(
 
 var subscriptionCancelErrorResponder = newErrorResponder(
 	[]rules.Rule[error, errorResponse]{
-		{Match: matchDomainError(domain.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
+		{Match: matchDomainError(shared.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
 	},
 	http.StatusInternalServerError,
 	"internal server error",

@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github-release-notifier/internal/logging"
+	"github-release-notifier/internal/platform/logging"
 	"log/slog"
 	"time"
 

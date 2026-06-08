@@ -15,13 +15,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github-release-notifier/internal/domain"
-	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/notifications"
 	notificationsrepo "github-release-notifier/internal/notifications/repository"
 	appdb "github-release-notifier/internal/platform/db"
+	appmetrics "github-release-notifier/internal/platform/metrics"
 	releasetracking "github-release-notifier/internal/release_tracking"
 	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
+	"github-release-notifier/internal/shared"
 	"github-release-notifier/internal/subscriptions"
 	subscriptionsrepo "github-release-notifier/internal/subscriptions/repository"
 
@@ -167,7 +167,7 @@ func TestSubscriptionAPI_SubscribeDuplicateDoesNotQueueSecondEmail(t *testing.T)
 func TestSubscriptionAPI_SubscribeGitHubErrorDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
-	fixture.githubClient.releaseErr = domain.ErrRateLimited
+	fixture.githubClient.releaseErr = shared.ErrRateLimited
 
 	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
@@ -179,7 +179,7 @@ func TestSubscriptionAPI_SubscribeGitHubErrorDoesNotPersistBusinessDataOrOutbox(
 func TestSubscriptionAPI_SubscribeRepositoryNotFoundDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
-	fixture.githubClient.existsErr = domain.ErrNotFound
+	fixture.githubClient.existsErr = shared.ErrNotFound
 
 	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
@@ -193,7 +193,7 @@ func TestSubscriptionAPI_SubscribeRepositoryNotFoundDoesNotPersistBusinessDataOr
 func TestSubscriptionAPI_SubscribeRepositoryExistsRateLimitedDoesNotPersistBusinessDataOrOutbox(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
-	fixture.githubClient.existsErr = domain.ErrRateLimited
+	fixture.githubClient.existsErr = shared.ErrRateLimited
 
 	response := fixture.postSubscribe(t, data.Email, data.Repo)
 
@@ -207,7 +207,7 @@ func TestSubscriptionAPI_SubscribeRepositoryExistsRateLimitedDoesNotPersistBusin
 func TestSubscriptionAPI_SubscribeRepositoryWithoutReleasesCreatesSubscriptionWithEmptyLastSeenTag(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
-	fixture.githubClient.releaseErr = domain.ErrNoReleases
+	fixture.githubClient.releaseErr = releasetracking.ErrNoReleases
 
 	response := fixture.postSubscribe(t, data.Email, data.Repo)
 

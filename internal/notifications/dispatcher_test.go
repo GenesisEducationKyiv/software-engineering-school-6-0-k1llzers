@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github-release-notifier/internal/domain"
-	appmetrics "github-release-notifier/internal/metrics"
+	appmetrics "github-release-notifier/internal/platform/metrics"
+	"github-release-notifier/internal/shared"
 
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +36,7 @@ func (s *outboxStoreStub) ClaimNextPending(_ context.Context, _ int) (Email, err
 		return s.claimResults[call], nil
 	}
 
-	return Email{}, domain.ErrNotFound
+	return Email{}, shared.ErrNotFound
 }
 
 func (s *outboxStoreStub) MarkSent(_ context.Context, id int64) error {
@@ -103,7 +103,7 @@ func TestOutboxDispatcher_Run_ReleasesEmailWhenSendFails(t *testing.T) {
 				HTMLBody:       "<p>body</p>",
 			},
 		},
-		claimErrs: []error{nil, domain.ErrNotFound},
+		claimErrs: []error{nil, shared.ErrNotFound},
 	}
 	sender := &senderStub{
 		err: errors.New("smtp failed"),

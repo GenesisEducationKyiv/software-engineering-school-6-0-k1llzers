@@ -10,8 +10,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github-release-notifier/internal/domain"
-	appmetrics "github-release-notifier/internal/metrics"
+	appmetrics "github-release-notifier/internal/platform/metrics"
+	"github-release-notifier/internal/shared"
 	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
@@ -179,10 +179,10 @@ func TestSubscriptionHandler_Create_MapsDomainErrors(t *testing.T) {
 		statusCode int
 		body       string
 	}{
-		{name: "already exists", err: domain.ErrAlreadyExists, statusCode: http.StatusConflict},
-		{name: "not found", err: domain.ErrNotFound, statusCode: http.StatusNotFound},
-		{name: "incorrect repository format", err: domain.ErrIncorrectRepositoryFormat, statusCode: http.StatusBadRequest},
-		{name: "rate limited", err: domain.ErrRateLimited, statusCode: http.StatusServiceUnavailable, body: `{"error":"github is temporarily unavailable, please try again later"}`},
+		{name: "already exists", err: subscriptions.ErrAlreadyExists, statusCode: http.StatusConflict},
+		{name: "not found", err: shared.ErrNotFound, statusCode: http.StatusNotFound},
+		{name: "incorrect repository format", err: subscriptions.ErrIncorrectRepositoryFormat, statusCode: http.StatusBadRequest},
+		{name: "rate limited", err: shared.ErrRateLimited, statusCode: http.StatusServiceUnavailable, body: `{"error":"github is temporarily unavailable, please try again later"}`},
 		{name: "internal", err: errors.New("boom"), statusCode: http.StatusInternalServerError},
 	}
 
@@ -241,8 +241,8 @@ func TestSubscriptionHandler_Confirm_MapsErrors(t *testing.T) {
 		err        error
 		statusCode int
 	}{
-		{name: "invalid token", err: domain.ErrInvalidToken, statusCode: http.StatusBadRequest},
-		{name: "not found", err: domain.ErrNotFound, statusCode: http.StatusNotFound},
+		{name: "invalid token", err: subscriptions.ErrInvalidToken, statusCode: http.StatusBadRequest},
+		{name: "not found", err: shared.ErrNotFound, statusCode: http.StatusNotFound},
 		{name: "internal", err: errors.New("boom"), statusCode: http.StatusInternalServerError},
 	}
 
@@ -297,7 +297,7 @@ func TestSubscriptionHandler_Cancel_MapsErrors(t *testing.T) {
 		err        error
 		statusCode int
 	}{
-		{name: "not found", err: domain.ErrNotFound, statusCode: http.StatusNotFound},
+		{name: "not found", err: shared.ErrNotFound, statusCode: http.StatusNotFound},
 		{name: "internal", err: errors.New("boom"), statusCode: http.StatusInternalServerError},
 	}
 

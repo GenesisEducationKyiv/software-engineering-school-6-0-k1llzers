@@ -2,10 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"github-release-notifier/internal/logging"
 	"log/slog"
 	"net/http"
 
+	"github-release-notifier/internal/platform/logging"
 	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"

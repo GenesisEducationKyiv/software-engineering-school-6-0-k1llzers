@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github-release-notifier/internal/domain"
+	releasetracking "github-release-notifier/internal/release_tracking"
+	"github-release-notifier/internal/shared"
 
 	"github.com/stretchr/testify/require"
 )
@@ -74,7 +75,7 @@ func TestClient_RepositoryExists_NotFound(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, server.Client(), "")
 
 	err := client.RepositoryExists(context.Background(), "gin-gonic", "gin")
-	require.ErrorIs(t, err, domain.ErrNotFound)
+	require.ErrorIs(t, err, shared.ErrNotFound)
 }
 
 func TestClient_RepositoryExists_RateLimited(t *testing.T) {
@@ -86,7 +87,7 @@ func TestClient_RepositoryExists_RateLimited(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, server.Client(), "")
 
 	err := client.RepositoryExists(context.Background(), "gin-gonic", "gin")
-	require.ErrorIs(t, err, domain.ErrRateLimited)
+	require.ErrorIs(t, err, shared.ErrRateLimited)
 }
 
 func TestClient_RepositoryExists_Forbidden(t *testing.T) {
@@ -98,7 +99,7 @@ func TestClient_RepositoryExists_Forbidden(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, server.Client(), "")
 
 	err := client.RepositoryExists(context.Background(), "gin-gonic", "gin")
-	require.ErrorIs(t, err, domain.ErrRateLimited)
+	require.ErrorIs(t, err, shared.ErrRateLimited)
 }
 
 func TestClient_RepositoryExists_ReturnsUnexpectedStatusError(t *testing.T) {
@@ -122,7 +123,7 @@ func TestClient_GetLatestRelease_NoReleases(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, server.Client(), "")
 
 	_, err := client.GetLatestRelease(context.Background(), "gin-gonic", "gin")
-	require.ErrorIs(t, err, domain.ErrNoReleases)
+	require.ErrorIs(t, err, releasetracking.ErrNoReleases)
 }
 
 func TestClient_GetLatestRelease_RateLimited(t *testing.T) {
@@ -134,7 +135,7 @@ func TestClient_GetLatestRelease_RateLimited(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, server.Client(), "")
 
 	_, err := client.GetLatestRelease(context.Background(), "gin-gonic", "gin")
-	require.ErrorIs(t, err, domain.ErrRateLimited)
+	require.ErrorIs(t, err, shared.ErrRateLimited)
 }
 
 func TestClient_GetLatestRelease_Forbidden(t *testing.T) {
@@ -146,7 +147,7 @@ func TestClient_GetLatestRelease_Forbidden(t *testing.T) {
 	client := NewClientWithBaseURL(server.URL, server.Client(), "")
 
 	_, err := client.GetLatestRelease(context.Background(), "gin-gonic", "gin")
-	require.ErrorIs(t, err, domain.ErrRateLimited)
+	require.ErrorIs(t, err, shared.ErrRateLimited)
 }
 
 func TestClient_GetLatestRelease_ReturnsUnexpectedStatusError(t *testing.T) {

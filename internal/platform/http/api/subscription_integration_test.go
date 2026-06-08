@@ -82,7 +82,7 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	gin.SetMode(gin.TestMode)
 
 	_, db := test.SetupTestPostgres(t)
-	require.NoError(t, appdb.RunMigrations(context.Background(), db, filepath.Join("..", "..", "migrations")))
+	require.NoError(t, appdb.RunMigrations(context.Background(), db, filepath.Join("..", "..", "..", "..", "migrations")))
 
 	renderer, err := notifications.NewTemplateRenderer()
 	require.NoError(t, err)

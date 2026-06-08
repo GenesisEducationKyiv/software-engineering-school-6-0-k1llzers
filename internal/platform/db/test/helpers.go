@@ -26,7 +26,7 @@ func SetupTestDB(t *testing.T) *sql.DB {
 	_, db := SetupTestPostgres(t)
 	ctx := context.Background()
 
-	migrationsDir := filepath.Join("..", "..", "..", "migrations")
+	migrationsDir := filepath.Join("..", "..", "..", "..", "migrations")
 	require.NoError(t, appdb.RunMigrations(ctx, db, migrationsDir))
 
 	return db

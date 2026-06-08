@@ -30,19 +30,17 @@ func (s *userCreatorStub) CreateIfNotExists(_ context.Context, email string) (Us
 }
 
 type trackedRepositoryProviderStub struct {
-	result      releasetracking.TrackedRepository
-	err         error
-	owner       string
-	repoName    string
-	lastSeenTag string
-	updatedID   int64
-	updatedTag  string
+	result     releasetracking.TrackedRepository
+	err        error
+	owner      string
+	repoName   string
+	updatedID  int64
+	updatedTag string
 }
 
-func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (releasetracking.TrackedRepository, error) {
+func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string) (releasetracking.TrackedRepository, error) {
 	s.owner = owner
 	s.repoName = name
-	s.lastSeenTag = lastSeenTag
 	if s.err != nil {
 		return releasetracking.TrackedRepository{}, s.err
 	}
@@ -203,7 +201,7 @@ func TestSubscriptionService_Subscribe_UsesExistingTrackedRepository(t *testing.
 		},
 	}
 	transactionManager := &transactionManagerStub{}
-	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{}
 	mailQueue := &confirmationSenderStub{}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
@@ -217,7 +215,7 @@ func TestSubscriptionService_Subscribe_UsesExistingTrackedRepository(t *testing.
 	require.Equal(t, int64(20), subscriptions.createdRepositoryID)
 	require.Equal(t, "gin-gonic", repositories.owner)
 	require.Equal(t, "gin", repositories.repoName)
-	require.Equal(t, "v1.11.0", repositories.lastSeenTag)
+	require.Equal(t, 0, releaseClient.calls)
 	require.True(t, mailQueue.called)
 	require.Equal(t, "test@example.com", mailQueue.recipientEmail)
 	require.Equal(t, "gin-gonic/gin", mailQueue.repositoryFullName)
@@ -233,7 +231,7 @@ func TestSubscriptionService_Subscribe_ReturnsUserStoreError(t *testing.T) {
 	users := &userCreatorStub{err: expectedErr}
 	repositories := &trackedRepositoryProviderStub{}
 	subscriptions := &subscriptionCreatorStub{}
-	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -243,7 +241,7 @@ func TestSubscriptionService_Subscribe_ReturnsUserStoreError(t *testing.T) {
 	require.True(t, transactionManager.rolledBack)
 }
 
-func TestSubscriptionService_Subscribe_AllowsRepositoryWithoutReleases(t *testing.T) {
+func TestSubscriptionService_Subscribe_DoesNotFetchLatestRelease(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
 	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
 	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
@@ -256,13 +254,13 @@ func TestSubscriptionService_Subscribe_AllowsRepositoryWithoutReleases(t *testin
 			CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		},
 	}
-	releaseClient := &gitRepositoryProviderStub{releaseErr: releasetracking.ErrNoReleases}
+	releaseClient := &gitRepositoryProviderStub{releaseErr: errors.New("should not be called")}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
 	require.NoError(t, err)
-	require.Equal(t, "", repositories.lastSeenTag)
+	require.Equal(t, 0, releaseClient.calls)
 }
 
 func TestSubscriptionService_Subscribe_ReturnsRepositoryValidationError(t *testing.T) {
@@ -280,28 +278,13 @@ func TestSubscriptionService_Subscribe_ReturnsRepositoryValidationError(t *testi
 	require.False(t, transactionManager.called)
 }
 
-func TestSubscriptionService_Subscribe_ReturnsLatestReleaseError(t *testing.T) {
-	expectedErr := errors.New("release lookup failed")
-	transactionManager := &transactionManagerStub{}
-	users := &userCreatorStub{}
-	repositories := &trackedRepositoryProviderStub{}
-	subscriptions := &subscriptionCreatorStub{}
-	releaseClient := &gitRepositoryProviderStub{releaseErr: expectedErr}
-
-	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
-
-	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic/gin")
-	require.ErrorIs(t, err, expectedErr)
-	require.False(t, transactionManager.called)
-}
-
 func TestSubscriptionService_Subscribe_ReturnsSubscriptionStoreError(t *testing.T) {
 	expectedErr := errors.New("subscription store failed")
 	transactionManager := &transactionManagerStub{}
 	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
 	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
 	subscriptions := &subscriptionCreatorStub{err: expectedErr}
-	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -317,7 +300,7 @@ func TestSubscriptionService_Subscribe_ReturnsRepositoryStoreError(t *testing.T)
 	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
 	repositories := &trackedRepositoryProviderStub{err: expectedErr}
 	subscriptions := &subscriptionCreatorStub{}
-	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -353,7 +336,7 @@ func TestSubscriptionService_Subscribe_ReturnsConfirmationSenderError(t *testing
 			CancellationToken: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		},
 	}
-	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{}
 	mailQueue := &confirmationSenderStub{err: expectedErr}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
@@ -378,7 +361,7 @@ func TestSubscriptionService_Subscribe_ReturnsTransactionManagerError(t *testing
 			CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		},
 	}
-	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 

@@ -6,7 +6,7 @@ type ConfirmedRepositorySubscription struct {
 	TrackedRepositoryID int64
 	Owner               string
 	Name                string
-	LastSeenTag         string
+	LastSeenTag         *string
 	Email               string
 	CancellationToken   uuid.UUID
 }

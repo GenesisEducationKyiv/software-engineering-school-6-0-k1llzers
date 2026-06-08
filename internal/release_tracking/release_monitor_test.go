@@ -16,19 +16,17 @@ import (
 )
 
 type trackedRepositoryProviderStub struct {
-	result      TrackedRepository
-	err         error
-	owner       string
-	repoName    string
-	lastSeenTag string
-	updatedID   int64
-	updatedTag  string
+	result     TrackedRepository
+	err        error
+	owner      string
+	repoName   string
+	updatedID  int64
+	updatedTag string
 }
 
-func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (TrackedRepository, error) {
+func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string) (TrackedRepository, error) {
 	s.owner = owner
 	s.repoName = name
-	s.lastSeenTag = lastSeenTag
 	if s.err != nil {
 		return TrackedRepository{}, s.err
 	}
@@ -114,7 +112,7 @@ func TestReleaseMonitor_CheckOnce_QueuesEmailsAndUpdatesTag(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -122,7 +120,7 @@ func TestReleaseMonitor_CheckOnce_QueuesEmailsAndUpdatesTag(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "second@example.com",
 				CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			},
@@ -163,7 +161,7 @@ func TestReleaseMonitor_CheckOnce_SkipsSameTag(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.11.0",
+				LastSeenTag:         strPtr("v1.11.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -198,7 +196,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsTransactionError(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -241,7 +239,7 @@ func TestReleaseMonitor_CheckOnce_SkipsRepositoryWithoutReleases(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "",
+				LastSeenTag:         nil,
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -265,6 +263,71 @@ func TestReleaseMonitor_CheckOnce_SkipsRepositoryWithoutReleases(t *testing.T) {
 	require.False(t, transactionManager.called)
 }
 
+func TestReleaseMonitor_CheckOnce_InitializesCursorWithoutNotifications(t *testing.T) {
+	transactionManager := &transactionManagerStub{}
+	trackedRepositories := &trackedRepositoryProviderStub{}
+	subscriptions := &subscriptionCreatorStub{
+		confirmedList: []ConfirmedRepositorySubscription{
+			{
+				TrackedRepositoryID: 10,
+				Owner:               "gin-gonic",
+				Name:                "gin",
+				LastSeenTag:         nil,
+				Email:               "first@example.com",
+				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			},
+		},
+	}
+	gitRepositories := &gitRepositoryProviderStub{
+		result: Release{TagName: "v1.11.0"},
+	}
+	notifications := &notificationQueueFactoryStub{}
+
+	service := NewReleaseMonitor(
+		transactionManager,
+		trackedRepositories,
+		subscriptions,
+		gitRepositories,
+		notifications,
+		newTestMetrics(t),
+	)
+
+	err := service.CheckOnce(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, notifications.releaseCalls)
+	require.Equal(t, int64(10), trackedRepositories.updatedID)
+	require.Equal(t, "v1.11.0", trackedRepositories.updatedTag)
+	require.False(t, transactionManager.called)
+}
+
+func TestReleaseMonitor_CheckOnce_ReturnsInitializeCursorError(t *testing.T) {
+	expectedErr := errors.New("update failed")
+	subscriptions := &subscriptionCreatorStub{
+		confirmedList: []ConfirmedRepositorySubscription{
+			{
+				TrackedRepositoryID: 10,
+				Owner:               "gin-gonic",
+				Name:                "gin",
+				LastSeenTag:         nil,
+				Email:               "first@example.com",
+				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			},
+		},
+	}
+
+	service := NewReleaseMonitor(
+		&transactionManagerStub{},
+		&trackedRepositoryProviderStub{err: expectedErr},
+		subscriptions,
+		&gitRepositoryProviderStub{result: Release{TagName: "v1.11.0"}},
+		&notificationQueueFactoryStub{},
+		newTestMetrics(t),
+	)
+
+	err := service.CheckOnce(context.Background())
+	require.ErrorIs(t, err, expectedErr)
+}
+
 func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{
 		confirmedList: []ConfirmedRepositorySubscription{
@@ -272,7 +335,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -280,7 +343,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 				TrackedRepositoryID: 20,
 				Owner:               "labstack",
 				Name:                "echo",
-				LastSeenTag:         "v4.13.3",
+				LastSeenTag:         strPtr("v4.13.3"),
 				Email:               "second@example.com",
 				CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			},
@@ -310,7 +373,7 @@ func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -318,7 +381,7 @@ func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
 				TrackedRepositoryID: 20,
 				Owner:               "labstack",
 				Name:                "echo",
-				LastSeenTag:         "v4.13.3",
+				LastSeenTag:         strPtr("v4.13.3"),
 				Email:               "second@example.com",
 				CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			},
@@ -349,7 +412,7 @@ func TestReleaseMonitor_CheckOnce_UsesReleaseHTMLURLWhenPresent(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -388,7 +451,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsUpdateLastSeenTagError(t *testing.T) {
 				TrackedRepositoryID: 10,
 				Owner:               "gin-gonic",
 				Name:                "gin",
-				LastSeenTag:         "v1.10.0",
+				LastSeenTag:         strPtr("v1.10.0"),
 				Email:               "first@example.com",
 				CancellationToken:   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			},
@@ -414,21 +477,21 @@ func TestGroupConfirmedSubscriptions(t *testing.T) {
 			TrackedRepositoryID: 10,
 			Owner:               "gin-gonic",
 			Name:                "gin",
-			LastSeenTag:         "v1.11.0",
+			LastSeenTag:         strPtr("v1.11.0"),
 			Email:               "first@example.com",
 		},
 		{
 			TrackedRepositoryID: 10,
 			Owner:               "gin-gonic",
 			Name:                "gin",
-			LastSeenTag:         "v1.11.0",
+			LastSeenTag:         strPtr("v1.11.0"),
 			Email:               "second@example.com",
 		},
 		{
 			TrackedRepositoryID: 20,
 			Owner:               "labstack",
 			Name:                "echo",
-			LastSeenTag:         "v4.13.4",
+			LastSeenTag:         strPtr("v4.13.4"),
 			Email:               "third@example.com",
 		},
 	}
@@ -472,6 +535,10 @@ func newTestMetrics(t *testing.T) *appmetrics.Metrics {
 	})
 
 	return metricSet
+}
+
+func strPtr(value string) *string {
+	return &value
 }
 
 type releaseCall struct {

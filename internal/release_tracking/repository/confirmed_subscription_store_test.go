@@ -31,7 +31,9 @@ func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_Returns
 	secondUser, err := userStore.CreateIfNotExists(ctx, secondUserEmail)
 	require.NoError(t, err)
 
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.11.0")
+	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
+	require.NoError(t, err)
+	err = trackedRepositoryStore.UpdateLastSeenTag(ctx, repository.ID, "v1.11.0")
 	require.NoError(t, err)
 
 	firstSubscription, err := subscriptionStore.Create(ctx, firstUser.ID, repository.ID)
@@ -49,7 +51,7 @@ func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_Returns
 		TrackedRepositoryID: repository.ID,
 		Owner:               repositoryData.Owner,
 		Name:                repositoryData.Name,
-		LastSeenTag:         "v1.11.0",
+		LastSeenTag:         strPtr("v1.11.0"),
 		Email:               firstUserEmail,
 		CancellationToken:   firstSubscription.CancellationToken,
 	}
@@ -58,4 +60,8 @@ func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_Returns
 		require.NotEqual(t, secondUserEmail, item.Email)
 	}
 	require.NotEqual(t, firstSubscription.CancellationToken, secondSubscription.CancellationToken)
+}
+
+func strPtr(value string) *string {
+	return &value
 }

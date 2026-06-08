@@ -18,13 +18,12 @@ func TestTrackedRepositoryStore_CreateIfNotExists_CreatesRepository(t *testing.T
 
 	ctx := context.Background()
 	repository := test.NewTestRepository()
-	created, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name, "v1.0.0")
+	created, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name)
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
 	require.Equal(t, repository.Owner, created.Owner)
 	require.Equal(t, repository.Name, created.Name)
-	require.NotNil(t, created.LastSeenTag)
-	require.Equal(t, "v1.0.0", *created.LastSeenTag)
+	require.Nil(t, created.LastSeenTag)
 }
 
 func TestTrackedRepositoryStore_CreateIfNotExists_ReturnsExistingRepositoryWithoutOverwritingTag(t *testing.T) {
@@ -33,10 +32,13 @@ func TestTrackedRepositoryStore_CreateIfNotExists_ReturnsExistingRepositoryWitho
 
 	ctx := context.Background()
 	repository := test.NewTestRepository()
-	first, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name, "v1.0.0")
+	first, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name)
 	require.NoError(t, err)
 
-	second, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name, "v2.0.0")
+	err = store.UpdateLastSeenTag(ctx, first.ID, "v1.0.0")
+	require.NoError(t, err)
+
+	second, err := store.CreateIfNotExists(ctx, repository.Owner, repository.Name)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID)
 	require.NotNil(t, second.LastSeenTag)
@@ -50,7 +52,7 @@ func TestTrackedRepositoryStore_UpdateLastSeenTag_UpdatesRepository(t *testing.T
 
 	ctx := context.Background()
 	testRepository := test.NewTestRepository()
-	repository, err := store.CreateIfNotExists(ctx, testRepository.Owner, testRepository.Name, "")
+	repository, err := store.CreateIfNotExists(ctx, testRepository.Owner, testRepository.Name)
 	require.NoError(t, err)
 
 	err = store.UpdateLastSeenTag(ctx, repository.ID, "v1.11.0")
@@ -71,7 +73,7 @@ func TestTrackedRepositoryStore_MethodsUseTransaction(t *testing.T) {
 
 	txCtx := dbtx.WithTransactionContext(ctx, tx)
 	testRepository := test.NewTestRepository()
-	repository, err := store.CreateIfNotExists(txCtx, testRepository.Owner, testRepository.Name, "")
+	repository, err := store.CreateIfNotExists(txCtx, testRepository.Owner, testRepository.Name)
 	require.NoError(t, err)
 
 	err = store.UpdateLastSeenTag(txCtx, repository.ID, "v4.13.4")

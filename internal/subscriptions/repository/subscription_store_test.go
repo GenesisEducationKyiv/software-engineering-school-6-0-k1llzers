@@ -31,7 +31,7 @@ func TestSubscriptionStore_Create(t *testing.T) {
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -58,7 +58,7 @@ func TestSubscriptionStore_Create_UsesTransaction(t *testing.T) {
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "")
+	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
 	require.NoError(t, err)
 
 	tx := test.BeginTestTx(t, db)
@@ -86,7 +86,7 @@ func TestSubscriptionStore_Create_DuplicateSubscription(t *testing.T) {
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
 	require.NoError(t, err)
 
 	_, err = subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -110,7 +110,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -139,7 +139,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -174,7 +174,7 @@ func TestSubscriptionStore_DeleteByCancellationToken(t *testing.T) {
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name)
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -212,10 +212,14 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	firstRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, firstRepoData.Owner, firstRepoData.Name, "v1.11.0")
+	firstRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, firstRepoData.Owner, firstRepoData.Name)
+	require.NoError(t, err)
+	err = trackedRepositoryStore.UpdateLastSeenTag(ctx, firstRepo.ID, "v1.11.0")
 	require.NoError(t, err)
 
-	secondRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, secondRepoData.Owner, secondRepoData.Name, "v4.13.4")
+	secondRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, secondRepoData.Owner, secondRepoData.Name)
+	require.NoError(t, err)
+	err = trackedRepositoryStore.UpdateLastSeenTag(ctx, secondRepo.ID, "v4.13.4")
 	require.NoError(t, err)
 
 	firstSubscription, err := subscriptionStore.Create(ctx, user.ID, firstRepo.ID)

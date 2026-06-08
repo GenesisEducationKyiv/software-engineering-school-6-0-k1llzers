@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	appdb "github-release-notifier/internal/platform/db"
@@ -26,7 +27,10 @@ func SetupTestDB(t *testing.T) *sql.DB {
 	_, db := SetupTestPostgres(t)
 	ctx := context.Background()
 
-	migrationsDir := filepath.Join("..", "..", "..", "migrations")
+	_, currentFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	migrationsDir := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", "migrations"))
 	require.NoError(t, appdb.RunMigrations(ctx, db, migrationsDir))
 
 	return db

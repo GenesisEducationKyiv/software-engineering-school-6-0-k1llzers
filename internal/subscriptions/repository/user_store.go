@@ -1,10 +1,11 @@
-package storage
+package repository
 
 import (
 	"context"
 	"database/sql"
 
-	"github-release-notifier/internal/domain"
+	appdb "github-release-notifier/internal/platform/db"
+	"github-release-notifier/internal/subscriptions"
 )
 
 type UserStore struct {
@@ -15,7 +16,7 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-func (s *UserStore) CreateIfNotExists(ctx context.Context, email string) (domain.User, error) {
+func (s *UserStore) CreateIfNotExists(ctx context.Context, email string) (subscriptions.User, error) {
 	query := `
 		insert into users (email)
 		values ($1)
@@ -24,16 +25,16 @@ func (s *UserStore) CreateIfNotExists(ctx context.Context, email string) (domain
 		returning id, email, created_at, updated_at;
 	`
 
-	var result domain.User
+	var result subscriptions.User
 
-	err := newQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, email).Scan(
+	err := appdb.NewQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, email).Scan(
 		&result.ID,
 		&result.Email,
 		&result.CreatedAt,
 		&result.UpdatedAt,
 	)
 	if err != nil {
-		return domain.User{}, err
+		return subscriptions.User{}, err
 	}
 
 	return result, nil

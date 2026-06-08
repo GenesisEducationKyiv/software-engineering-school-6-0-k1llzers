@@ -1,6 +1,6 @@
 //go:build integration
 
-package db
+package db_test
 
 import (
 	"context"
@@ -9,15 +9,16 @@ import (
 	"strings"
 	"testing"
 
-	"github-release-notifier/internal/dbtest"
+	appdb "github-release-notifier/internal/platform/db"
+	"github-release-notifier/internal/platform/db/test"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTransactionManager_WithinTransaction_Commits(t *testing.T) {
-	_, db := dbtest.SetupTestPostgres(t)
-	manager := NewTransactionManager(db)
+	_, db := test.SetupTestPostgres(t)
+	manager := appdb.NewTransactionManager(db)
 	ctx := context.Background()
 	tableName := uniqueTransactionTestTableName()
 
@@ -25,7 +26,7 @@ func TestTransactionManager_WithinTransaction_Commits(t *testing.T) {
 	require.NoError(t, err)
 
 	err = manager.WithinTransaction(ctx, func(ctx context.Context) error {
-		tx := TxFromContext(ctx)
+		tx := appdb.TxFromContext(ctx)
 		_, execErr := tx.ExecContext(ctx, fmt.Sprintf(`insert into %s (value) values (1)`, tableName))
 		return execErr
 	})
@@ -38,8 +39,8 @@ func TestTransactionManager_WithinTransaction_Commits(t *testing.T) {
 }
 
 func TestTransactionManager_WithinTransaction_RollsBackOnError(t *testing.T) {
-	_, db := dbtest.SetupTestPostgres(t)
-	manager := NewTransactionManager(db)
+	_, db := test.SetupTestPostgres(t)
+	manager := appdb.NewTransactionManager(db)
 	ctx := context.Background()
 	tableName := uniqueTransactionTestTableName()
 
@@ -48,7 +49,7 @@ func TestTransactionManager_WithinTransaction_RollsBackOnError(t *testing.T) {
 
 	expectedErr := errors.New("boom")
 	err = manager.WithinTransaction(ctx, func(ctx context.Context) error {
-		tx := TxFromContext(ctx)
+		tx := appdb.TxFromContext(ctx)
 		_, execErr := tx.ExecContext(ctx, fmt.Sprintf(`insert into %s (value) values (1)`, tableName))
 		require.NoError(t, execErr)
 		return expectedErr
@@ -62,8 +63,8 @@ func TestTransactionManager_WithinTransaction_RollsBackOnError(t *testing.T) {
 }
 
 func TestTransactionManager_WithinTransaction_RollsBackOnPanic(t *testing.T) {
-	_, db := dbtest.SetupTestPostgres(t)
-	manager := NewTransactionManager(db)
+	_, db := test.SetupTestPostgres(t)
+	manager := appdb.NewTransactionManager(db)
 	ctx := context.Background()
 	tableName := uniqueTransactionTestTableName()
 
@@ -72,7 +73,7 @@ func TestTransactionManager_WithinTransaction_RollsBackOnPanic(t *testing.T) {
 
 	require.PanicsWithValue(t, "panic in transaction", func() {
 		_ = manager.WithinTransaction(ctx, func(ctx context.Context) error {
-			tx := TxFromContext(ctx)
+			tx := appdb.TxFromContext(ctx)
 			_, execErr := tx.ExecContext(ctx, fmt.Sprintf(`insert into %s (value) values (1)`, tableName))
 			require.NoError(t, execErr)
 			panic("panic in transaction")

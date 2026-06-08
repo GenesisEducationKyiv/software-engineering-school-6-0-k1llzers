@@ -3,8 +3,7 @@ package subscriptions
 import (
 	"context"
 
-	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/readmodel"
+	releasetracking "github-release-notifier/internal/release_tracking"
 
 	"github.com/google/uuid"
 )
@@ -14,18 +13,18 @@ type txManager interface {
 }
 
 type userStore interface {
-	CreateIfNotExists(ctx context.Context, email string) (domain.User, error)
+	CreateIfNotExists(ctx context.Context, email string) (User, error)
 }
 
 type trackedRepositoryCreator interface {
-	CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error)
+	CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (releasetracking.TrackedRepository, error)
 }
 
 type subscriptionStore interface {
-	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error)
+	Create(ctx context.Context, userID int64, trackedRepositoryID int64) (Subscription, error)
 	SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error
 	DeleteByCancellationToken(ctx context.Context, cancellationToken string) error
-	ListByEmail(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
+	ListByEmail(ctx context.Context, email string) ([]SubscriptionView, error)
 }
 
 type confirmationQueue interface {
@@ -34,7 +33,7 @@ type confirmationQueue interface {
 
 type githubRepositoryClient interface {
 	RepositoryExists(ctx context.Context, owner string, repoName string) error
-	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
+	GetLatestRelease(ctx context.Context, owner string, repoName string) (releasetracking.Release, error)
 }
 
 type Service struct {
@@ -98,6 +97,6 @@ func (s *Service) CancelSubscription(ctx context.Context, token string) error {
 	return s.subscriptions.DeleteByCancellationToken(ctx, token)
 }
 
-func (s *Service) ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error) {
+func (s *Service) ListSubscriptions(ctx context.Context, email string) ([]SubscriptionView, error) {
 	return s.subscriptions.ListByEmail(ctx, email)
 }

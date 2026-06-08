@@ -1,4 +1,4 @@
-package readmodel
+package releasetracking
 
 import "github.com/google/uuid"
 

@@ -1,20 +1,18 @@
-package storage
+package db
 
 import (
 	"context"
 	"database/sql"
-
-	txdb "github-release-notifier/internal/db"
 )
 
-type queryExecutor interface {
+type QueryExecutor interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-func newQueryExecutor(ctx context.Context, db *sql.DB) queryExecutor {
-	tx := txdb.TxFromContext(ctx)
+func NewQueryExecutor(ctx context.Context, db *sql.DB) QueryExecutor {
+	tx := TxFromContext(ctx)
 	if tx != nil {
 		return tx
 	}

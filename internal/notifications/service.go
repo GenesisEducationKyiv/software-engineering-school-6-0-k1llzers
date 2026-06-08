@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github-release-notifier/internal/outbox"
-
 	"github.com/google/uuid"
 )
 
@@ -14,7 +12,7 @@ type renderer interface {
 }
 
 type outboxWriter interface {
-	Create(ctx context.Context, recipientEmail string, email outbox.Email) error
+	Create(ctx context.Context, recipientEmail string, email Email) error
 }
 
 type Service struct {
@@ -65,8 +63,8 @@ func (s *Service) enqueue(ctx context.Context, recipientEmail string, email Rend
 	return nil
 }
 
-func toOutboxEmail(email RenderedEmail) outbox.Email {
-	return outbox.Email{
+func toOutboxEmail(email RenderedEmail) Email {
+	return Email{
 		Subject:  email.Subject,
 		HTMLBody: email.HTMLBody,
 	}

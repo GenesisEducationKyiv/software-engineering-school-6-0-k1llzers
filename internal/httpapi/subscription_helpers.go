@@ -6,8 +6,8 @@ import (
 	"net/mail"
 
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/readmodel"
 	"github-release-notifier/internal/rules"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -110,7 +110,7 @@ func parseToken(raw string, invalidMessage string) (string, error) {
 	return raw, nil
 }
 
-func toListSubscriptionsResponse(subscriptions []readmodel.SubscriptionView) []listSubscriptionsResponse {
+func toListSubscriptionsResponse(subscriptions []subscriptions.SubscriptionView) []listSubscriptionsResponse {
 	response := make([]listSubscriptionsResponse, 0, len(subscriptions))
 	for _, subscription := range subscriptions {
 		response = append(response, listSubscriptionsResponse{

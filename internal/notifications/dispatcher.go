@@ -8,7 +8,6 @@ import (
 
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/outbox"
 )
 
 const (
@@ -17,7 +16,7 @@ const (
 )
 
 type outboxStore interface {
-	ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (outbox.Email, error)
+	ClaimNextPending(ctx context.Context, processingTimeoutSeconds int) (Email, error)
 	MarkSent(ctx context.Context, id int64) error
 	Release(ctx context.Context, id int64, lastError string) error
 }

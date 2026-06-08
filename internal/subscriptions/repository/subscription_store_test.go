@@ -1,30 +1,32 @@
 //go:build integration
 
-package storage
+package repository
 
 import (
 	"context"
 	"errors"
+	"github-release-notifier/internal/platform/db/test"
 	"testing"
 
-	dbtx "github-release-notifier/internal/db"
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/readmodel"
+	dbtx "github-release-notifier/internal/platform/db"
+	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSubscriptionStore_Create(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	repositoryData := newTestRepository()
+	email := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -44,22 +46,22 @@ func TestSubscriptionStore_Create(t *testing.T) {
 }
 
 func TestSubscriptionStore_Create_UsesTransaction(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	repositoryData := newTestRepository()
+	email := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
 	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "")
 	require.NoError(t, err)
 
-	tx := beginTestTx(t, db)
+	tx := test.BeginTestTx(t, db)
 	created, err := subscriptionStore.Create(dbtx.WithTransactionContext(ctx, tx), user.ID, repository.ID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
@@ -71,15 +73,15 @@ func TestSubscriptionStore_Create_UsesTransaction(t *testing.T) {
 }
 
 func TestSubscriptionStore_Create_DuplicateSubscription(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	repositoryData := newTestRepository()
+	email := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -95,15 +97,15 @@ func TestSubscriptionStore_Create_DuplicateSubscription(t *testing.T) {
 }
 
 func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	repositoryData := newTestRepository()
+	email := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -124,15 +126,15 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 }
 
 func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalidTokenWhenAlreadyConfirmed(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	repositoryData := newTestRepository()
+	email := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -151,7 +153,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 }
 
 func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_NotFound(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	err := subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(context.Background(), uuid.NewString())
@@ -159,15 +161,15 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_NotFound(t *te
 }
 
 func TestSubscriptionStore_DeleteByCancellationToken(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	repositoryData := newTestRepository()
+	email := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -188,7 +190,7 @@ func TestSubscriptionStore_DeleteByCancellationToken(t *testing.T) {
 }
 
 func TestSubscriptionStore_DeleteByCancellationToken_NotFound(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	err := subscriptionStore.DeleteByCancellationToken(context.Background(), uuid.NewString())
@@ -196,16 +198,16 @@ func TestSubscriptionStore_DeleteByCancellationToken_NotFound(t *testing.T) {
 }
 
 func TestSubscriptionStore_ListByEmail(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	email := newTestEmail()
-	firstRepoData := newTestRepositoryWithPrefix("a")
-	secondRepoData := newTestRepositoryWithPrefix("z")
+	email := test.NewTestEmail()
+	firstRepoData := test.NewTestRepositoryWithPrefix("a")
+	secondRepoData := test.NewTestRepositoryWithPrefix("z")
 
 	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -228,13 +230,13 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 	items, err := subscriptionStore.ListByEmail(ctx, email)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
-	require.Equal(t, readmodel.SubscriptionView{
+	require.Equal(t, subscriptions.SubscriptionView{
 		Email:       email,
 		Repo:        firstRepoData.Owner + "/" + firstRepoData.Name,
 		Confirmed:   true,
 		LastSeenTag: "v1.11.0",
 	}, items[0])
-	require.Equal(t, readmodel.SubscriptionView{
+	require.Equal(t, subscriptions.SubscriptionView{
 		Email:       email,
 		Repo:        secondRepoData.Owner + "/" + secondRepoData.Name,
 		Confirmed:   false,
@@ -243,62 +245,16 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 }
 
 func TestSubscriptionStore_ListByEmail_Empty(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
-	items, err := subscriptionStore.ListByEmail(context.Background(), newTestEmail())
+	items, err := subscriptionStore.ListByEmail(context.Background(), test.NewTestEmail())
 	require.NoError(t, err)
 	require.Empty(t, items)
 }
 
-func TestSubscriptionStore_ListConfirmedRepositorySubscriptions_ReturnsOnlyConfirmedSubscriptions(t *testing.T) {
-	db := setupTestDB(t)
-
-	userStore := NewUserStore(db)
-	trackedRepositoryStore := NewTrackedRepositoryStore(db)
-	subscriptionStore := NewSubscriptionStore(db)
-
-	ctx := context.Background()
-	firstUserEmail := newTestEmail()
-	secondUserEmail := newTestEmail()
-	repositoryData := newTestRepository()
-	firstUser, err := userStore.CreateIfNotExists(ctx, firstUserEmail)
-	require.NoError(t, err)
-
-	secondUser, err := userStore.CreateIfNotExists(ctx, secondUserEmail)
-	require.NoError(t, err)
-
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.11.0")
-	require.NoError(t, err)
-
-	firstSubscription, err := subscriptionStore.Create(ctx, firstUser.ID, repository.ID)
-	require.NoError(t, err)
-
-	secondSubscription, err := subscriptionStore.Create(ctx, secondUser.ID, repository.ID)
-	require.NoError(t, err)
-
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())
-	require.NoError(t, err)
-
-	items, err := subscriptionStore.ListConfirmedRepositorySubscriptions(ctx)
-	require.NoError(t, err)
-	expected := readmodel.ConfirmedRepositorySubscription{
-		TrackedRepositoryID: repository.ID,
-		Owner:               repositoryData.Owner,
-		Name:                repositoryData.Name,
-		LastSeenTag:         "v1.11.0",
-		Email:               firstUserEmail,
-		CancellationToken:   firstSubscription.CancellationToken,
-	}
-	require.Contains(t, items, expected)
-	for _, item := range items {
-		require.NotEqual(t, secondUserEmail, item.Email)
-	}
-	require.NotEqual(t, firstSubscription.CancellationToken, secondSubscription.CancellationToken)
-}
-
 func TestSubscriptionStore_Create_ReturnsForeignKeyErrorForUnknownReferences(t *testing.T) {
-	db := setupTestDB(t)
+	db := test.SetupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
 	_, err := subscriptionStore.Create(context.Background(), 999, 999)

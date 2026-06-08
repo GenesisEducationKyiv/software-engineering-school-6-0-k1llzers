@@ -10,13 +10,12 @@ import (
 
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/outbox"
 
 	"github.com/stretchr/testify/require"
 )
 
 type outboxStoreStub struct {
-	claimResults []outbox.Email
+	claimResults []Email
 	claimErrs    []error
 	claimCalls   int
 	markSentID   int64
@@ -26,18 +25,18 @@ type outboxStoreStub struct {
 	markSentErr  error
 }
 
-func (s *outboxStoreStub) ClaimNextPending(_ context.Context, _ int) (outbox.Email, error) {
+func (s *outboxStoreStub) ClaimNextPending(_ context.Context, _ int) (Email, error) {
 	call := s.claimCalls
 	s.claimCalls++
 
 	if call < len(s.claimErrs) && s.claimErrs[call] != nil {
-		return outbox.Email{}, s.claimErrs[call]
+		return Email{}, s.claimErrs[call]
 	}
 	if call < len(s.claimResults) {
 		return s.claimResults[call], nil
 	}
 
-	return outbox.Email{}, domain.ErrNotFound
+	return Email{}, domain.ErrNotFound
 }
 
 func (s *outboxStoreStub) MarkSent(_ context.Context, id int64) error {
@@ -71,7 +70,7 @@ func (s *senderStub) Deliver(_ context.Context, to string, email RenderedEmail) 
 
 func TestOutboxDispatcher_Run_SendsAndMarksSent(t *testing.T) {
 	store := &outboxStoreStub{
-		claimResults: []outbox.Email{
+		claimResults: []Email{
 			{
 				ID:             10,
 				RecipientEmail: "user@example.com",
@@ -96,7 +95,7 @@ func TestOutboxDispatcher_Run_SendsAndMarksSent(t *testing.T) {
 func TestOutboxDispatcher_Run_ReleasesEmailWhenSendFails(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	store := &outboxStoreStub{
-		claimResults: []outbox.Email{
+		claimResults: []Email{
 			{
 				ID:             20,
 				RecipientEmail: "user@example.com",

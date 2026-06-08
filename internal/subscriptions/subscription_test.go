@@ -8,29 +8,29 @@ import (
 	"testing"
 
 	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/readmodel"
+	releasetracking "github-release-notifier/internal/release_tracking"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 type userCreatorStub struct {
-	user  domain.User
+	user  User
 	err   error
 	email string
 }
 
-func (s *userCreatorStub) CreateIfNotExists(_ context.Context, email string) (domain.User, error) {
+func (s *userCreatorStub) CreateIfNotExists(_ context.Context, email string) (User, error) {
 	s.email = email
 	if s.err != nil {
-		return domain.User{}, s.err
+		return User{}, s.err
 	}
 
 	return s.user, nil
 }
 
 type trackedRepositoryProviderStub struct {
-	result      domain.TrackedRepository
+	result      releasetracking.TrackedRepository
 	err         error
 	owner       string
 	repoName    string
@@ -39,12 +39,12 @@ type trackedRepositoryProviderStub struct {
 	updatedTag  string
 }
 
-func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+func (s *trackedRepositoryProviderStub) CreateIfNotExists(_ context.Context, owner string, name string, lastSeenTag string) (releasetracking.TrackedRepository, error) {
 	s.owner = owner
 	s.repoName = name
 	s.lastSeenTag = lastSeenTag
 	if s.err != nil {
-		return domain.TrackedRepository{}, s.err
+		return releasetracking.TrackedRepository{}, s.err
 	}
 
 	return s.result, nil
@@ -57,7 +57,7 @@ func (s *trackedRepositoryProviderStub) UpdateLastSeenTag(_ context.Context, tra
 }
 
 type gitRepositoryProviderStub struct {
-	result     domain.Release
+	result     releasetracking.Release
 	releaseErr error
 	existsErr  error
 	owner      string
@@ -71,21 +71,20 @@ func (s *gitRepositoryProviderStub) RepositoryExists(_ context.Context, owner st
 	return s.existsErr
 }
 
-func (s *gitRepositoryProviderStub) GetLatestRelease(_ context.Context, owner string, repoName string) (domain.Release, error) {
+func (s *gitRepositoryProviderStub) GetLatestRelease(_ context.Context, owner string, repoName string) (releasetracking.Release, error) {
 	s.calls++
 	s.owner = owner
 	s.repoName = repoName
 	if s.releaseErr != nil {
-		return domain.Release{}, s.releaseErr
+		return releasetracking.Release{}, s.releaseErr
 	}
 
 	return s.result, nil
 }
 
 type subscriptionCreatorStub struct {
-	result              domain.Subscription
-	listResult          []readmodel.SubscriptionView
-	confirmedList       []readmodel.ConfirmedRepositorySubscription
+	result              Subscription
+	listResult          []SubscriptionView
 	err                 error
 	createdUserID       int64
 	createdRepositoryID int64
@@ -94,11 +93,11 @@ type subscriptionCreatorStub struct {
 	listEmail           string
 }
 
-func (s *subscriptionCreatorStub) Create(_ context.Context, userID int64, trackedRepositoryID int64) (domain.Subscription, error) {
+func (s *subscriptionCreatorStub) Create(_ context.Context, userID int64, trackedRepositoryID int64) (Subscription, error) {
 	s.createdUserID = userID
 	s.createdRepositoryID = trackedRepositoryID
 	if s.err != nil {
-		return domain.Subscription{}, s.err
+		return Subscription{}, s.err
 	}
 
 	return s.result, nil
@@ -122,21 +121,13 @@ func (s *subscriptionCreatorStub) DeleteByCancellationToken(_ context.Context, c
 	return nil
 }
 
-func (s *subscriptionCreatorStub) ListByEmail(_ context.Context, email string) ([]readmodel.SubscriptionView, error) {
+func (s *subscriptionCreatorStub) ListByEmail(_ context.Context, email string) ([]SubscriptionView, error) {
 	s.listEmail = email
 	if s.err != nil {
 		return nil, s.err
 	}
 
 	return s.listResult, nil
-}
-
-func (s *subscriptionCreatorStub) ListConfirmedRepositorySubscriptions(_ context.Context) ([]readmodel.ConfirmedRepositorySubscription, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-
-	return s.confirmedList, nil
 }
 
 type transactionManagerStub struct {
@@ -200,10 +191,10 @@ func (s *confirmationSenderStub) QueueReleaseNotification(_ context.Context, rec
 }
 
 func TestSubscriptionService_Subscribe_UsesExistingTrackedRepository(t *testing.T) {
-	users := &userCreatorStub{user: domain.User{ID: 10, Email: "test@example.com"}}
-	repositories := &trackedRepositoryProviderStub{result: domain.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
+	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
+	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
 	subscriptions := &subscriptionCreatorStub{
-		result: domain.Subscription{
+		result: Subscription{
 			ID:                  30,
 			UserID:              10,
 			TrackedRepositoryID: 20,
@@ -212,7 +203,7 @@ func TestSubscriptionService_Subscribe_UsesExistingTrackedRepository(t *testing.
 		},
 	}
 	transactionManager := &transactionManagerStub{}
-	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
 	mailQueue := &confirmationSenderStub{}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
@@ -242,7 +233,7 @@ func TestSubscriptionService_Subscribe_ReturnsUserStoreError(t *testing.T) {
 	users := &userCreatorStub{err: expectedErr}
 	repositories := &trackedRepositoryProviderStub{}
 	subscriptions := &subscriptionCreatorStub{}
-	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -254,10 +245,10 @@ func TestSubscriptionService_Subscribe_ReturnsUserStoreError(t *testing.T) {
 
 func TestSubscriptionService_Subscribe_AllowsRepositoryWithoutReleases(t *testing.T) {
 	transactionManager := &transactionManagerStub{}
-	users := &userCreatorStub{user: domain.User{ID: 10, Email: "test@example.com"}}
-	repositories := &trackedRepositoryProviderStub{result: domain.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
+	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
+	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
 	subscriptions := &subscriptionCreatorStub{
-		result: domain.Subscription{
+		result: Subscription{
 			ID:                  30,
 			UserID:              10,
 			TrackedRepositoryID: 20,
@@ -307,10 +298,10 @@ func TestSubscriptionService_Subscribe_ReturnsLatestReleaseError(t *testing.T) {
 func TestSubscriptionService_Subscribe_ReturnsSubscriptionStoreError(t *testing.T) {
 	expectedErr := errors.New("subscription store failed")
 	transactionManager := &transactionManagerStub{}
-	users := &userCreatorStub{user: domain.User{ID: 10, Email: "test@example.com"}}
-	repositories := &trackedRepositoryProviderStub{result: domain.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
+	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
+	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
 	subscriptions := &subscriptionCreatorStub{err: expectedErr}
-	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -323,10 +314,10 @@ func TestSubscriptionService_Subscribe_ReturnsSubscriptionStoreError(t *testing.
 func TestSubscriptionService_Subscribe_ReturnsRepositoryStoreError(t *testing.T) {
 	expectedErr := errors.New("repository store failed")
 	transactionManager := &transactionManagerStub{}
-	users := &userCreatorStub{user: domain.User{ID: 10, Email: "test@example.com"}}
+	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
 	repositories := &trackedRepositoryProviderStub{err: expectedErr}
 	subscriptions := &subscriptionCreatorStub{}
-	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -353,16 +344,16 @@ func TestSubscriptionService_Subscribe_ReturnsIncorrectRepositoryFormat(t *testi
 func TestSubscriptionService_Subscribe_ReturnsConfirmationSenderError(t *testing.T) {
 	expectedErr := errors.New("confirmation sender failed")
 	transactionManager := &transactionManagerStub{}
-	users := &userCreatorStub{user: domain.User{ID: 10, Email: "test@example.com"}}
-	repositories := &trackedRepositoryProviderStub{result: domain.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
+	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
+	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
 	subscriptions := &subscriptionCreatorStub{
-		result: domain.Subscription{
+		result: Subscription{
 			ID:                30,
 			ConfirmationToken: uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			CancellationToken: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		},
 	}
-	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
 	mailQueue := &confirmationSenderStub{err: expectedErr}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, mailQueue)
@@ -376,10 +367,10 @@ func TestSubscriptionService_Subscribe_ReturnsConfirmationSenderError(t *testing
 func TestSubscriptionService_Subscribe_ReturnsTransactionManagerError(t *testing.T) {
 	expectedErr := errors.New("commit failed")
 	transactionManager := &transactionManagerStub{err: expectedErr}
-	users := &userCreatorStub{user: domain.User{ID: 10, Email: "test@example.com"}}
-	repositories := &trackedRepositoryProviderStub{result: domain.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
+	users := &userCreatorStub{user: User{ID: 10, Email: "test@example.com"}}
+	repositories := &trackedRepositoryProviderStub{result: releasetracking.TrackedRepository{ID: 20, Owner: "gin-gonic", Name: "gin"}}
 	subscriptions := &subscriptionCreatorStub{
-		result: domain.Subscription{
+		result: Subscription{
 			ID:                  30,
 			UserID:              10,
 			TrackedRepositoryID: 20,
@@ -387,7 +378,7 @@ func TestSubscriptionService_Subscribe_ReturnsTransactionManagerError(t *testing
 			CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		},
 	}
-	releaseClient := &gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}}
+	releaseClient := &gitRepositoryProviderStub{result: releasetracking.Release{TagName: "v1.11.0"}}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -435,7 +426,7 @@ func TestSubscriptionService_CancelSubscription_ReturnsStoreError(t *testing.T) 
 
 func TestSubscriptionService_ListSubscriptions(t *testing.T) {
 	subscriptions := &subscriptionCreatorStub{
-		listResult: []readmodel.SubscriptionView{
+		listResult: []SubscriptionView{
 			{Email: "test@example.com", Repo: "gin-gonic/gin", Confirmed: true, LastSeenTag: "v1.11.0"},
 		},
 	}

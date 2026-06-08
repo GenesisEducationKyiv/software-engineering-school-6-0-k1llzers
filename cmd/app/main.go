@@ -8,16 +8,18 @@ import (
 	"os"
 
 	"github-release-notifier/internal/config"
-	"github-release-notifier/internal/db"
 	"github-release-notifier/internal/github"
 	"github-release-notifier/internal/httpapi"
 	"github-release-notifier/internal/logging"
 	"github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/notifications"
+	notificationsrepo "github-release-notifier/internal/notifications/repository"
+	appdb "github-release-notifier/internal/platform/db"
 	"github-release-notifier/internal/platform/mail/smtp"
 	"github-release-notifier/internal/release_tracking"
-	"github-release-notifier/internal/storage"
+	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
 	"github-release-notifier/internal/subscriptions"
+	subscriptionsrepo "github-release-notifier/internal/subscriptions/repository"
 
 	"github.com/gin-gonic/gin"
 )
@@ -85,12 +87,12 @@ type application struct {
 }
 
 func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
-	pg, err := db.OpenPostgres(ctx, datasourceURL)
+	pg, err := appdb.OpenPostgres(ctx, datasourceURL)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := db.RunMigrations(ctx, pg, "migrations"); err != nil {
+	if err := appdb.RunMigrations(ctx, pg, "migrations"); err != nil {
 		_ = pg.Close()
 		return nil, err
 	}
@@ -103,11 +105,12 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 		return nil, err
 	}
 
-	transactionManager := db.NewTransactionManager(pg)
-	userStore := storage.NewUserStore(pg)
-	trackedRepositoryStore := storage.NewTrackedRepositoryStore(pg)
-	subscriptionStore := storage.NewSubscriptionStore(pg)
-	outboxStore := storage.NewOutboxStore(pg)
+	transactionManager := appdb.NewTransactionManager(pg)
+	userStore := subscriptionsrepo.NewUserStore(pg)
+	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(pg)
+	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(pg)
+	confirmedSubscriptionStore := releasetrackingrepo.NewConfirmedSubscriptionStore(pg)
+	outboxStore := notificationsrepo.NewOutboxStore(pg)
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
 	templateRenderer, err := notifications.NewTemplateRenderer()
 	if err != nil {
@@ -131,7 +134,7 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 		releaseMonitor: releasetracking.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
-			subscriptionStore,
+			confirmedSubscriptionStore,
 			githubClient,
 			notificationService,
 			appMetrics,

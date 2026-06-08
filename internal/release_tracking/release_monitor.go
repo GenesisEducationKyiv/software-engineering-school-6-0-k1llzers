@@ -9,7 +9,6 @@ import (
 
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/readmodel"
 
 	"github.com/google/uuid"
 )
@@ -37,11 +36,11 @@ type trackedRepositoryTagUpdater interface {
 }
 
 type confirmedSubscriptionReader interface {
-	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]readmodel.ConfirmedRepositorySubscription, error)
+	ListConfirmedRepositorySubscriptions(ctx context.Context) ([]ConfirmedRepositorySubscription, error)
 }
 
 type latestReleaseReader interface {
-	GetLatestRelease(ctx context.Context, owner string, repoName string) (domain.Release, error)
+	GetLatestRelease(ctx context.Context, owner string, repoName string) (Release, error)
 }
 
 type ReleaseNotificationQueue interface {
@@ -134,7 +133,7 @@ type confirmedSubscriptionGroup struct {
 	owner               string
 	name                string
 	lastSeenTag         string
-	subscriptions       []readmodel.ConfirmedRepositorySubscription
+	subscriptions       []ConfirmedRepositorySubscription
 }
 
 func (g confirmedSubscriptionGroup) fullName() string {
@@ -166,7 +165,7 @@ func mapLatestReleaseError(group confirmedSubscriptionGroup, err error) error {
 	return fmt.Errorf("%s: %w", group.fullName(), err)
 }
 
-func (m *ReleaseMonitor) queueReleaseNotifications(ctx context.Context, group confirmedSubscriptionGroup, release domain.Release) error {
+func (m *ReleaseMonitor) queueReleaseNotifications(ctx context.Context, group confirmedSubscriptionGroup, release Release) error {
 	releaseURL := buildReleaseURL(group.owner, group.name, release.TagName, release.HTMLURL)
 
 	return m.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
@@ -184,7 +183,7 @@ func (g confirmedSubscriptionGroup) shouldNotify(tagName string) bool {
 	return tagName != "" && tagName != g.lastSeenTag
 }
 
-func groupConfirmedSubscriptions(items []readmodel.ConfirmedRepositorySubscription) []confirmedSubscriptionGroup {
+func groupConfirmedSubscriptions(items []ConfirmedRepositorySubscription) []confirmedSubscriptionGroup {
 	groupIndexByRepositoryID := make(map[int64]int)
 	groups := make([]confirmedSubscriptionGroup, 0)
 
@@ -197,7 +196,7 @@ func groupConfirmedSubscriptions(items []readmodel.ConfirmedRepositorySubscripti
 				owner:               item.Owner,
 				name:                item.Name,
 				lastSeenTag:         item.LastSeenTag,
-				subscriptions:       []readmodel.ConfirmedRepositorySubscription{item},
+				subscriptions:       []ConfirmedRepositorySubscription{item},
 			})
 			continue
 		}

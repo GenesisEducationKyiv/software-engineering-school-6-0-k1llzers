@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github-release-notifier/internal/readmodel"
+	"github-release-notifier/internal/subscriptions"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,7 +15,7 @@ type subscriptionService interface {
 	Subscribe(ctx context.Context, email string, repositoryFullName string) error
 	ConfirmSubscription(ctx context.Context, token string) error
 	CancelSubscription(ctx context.Context, token string) error
-	ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
+	ListSubscriptions(ctx context.Context, email string) ([]subscriptions.SubscriptionView, error)
 }
 
 type SubscriptionHandler struct {
@@ -71,14 +71,14 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 		return
 	}
 
-	subscriptions, err := h.subscriptions.ListSubscriptions(c.Request.Context(), email)
+	subscriptionsByEmail, err := h.subscriptions.ListSubscriptions(c.Request.Context(), email)
 	if err != nil {
 		slog.ErrorContext(c.Request.Context(), "subscription list failed", "email", email, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, toListSubscriptionsResponse(subscriptions))
+	c.JSON(http.StatusOK, toListSubscriptionsResponse(subscriptionsByEmail))
 }
 
 func (h *SubscriptionHandler) Confirm(c *gin.Context) {

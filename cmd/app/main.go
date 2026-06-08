@@ -15,7 +15,7 @@ import (
 	"github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/notifications"
 	"github-release-notifier/internal/platform/mail/smtp"
-	"github-release-notifier/internal/service"
+	"github-release-notifier/internal/release_tracking"
 	"github-release-notifier/internal/storage"
 	"github-release-notifier/internal/subscriptions"
 
@@ -81,7 +81,7 @@ func main() {
 type application struct {
 	router           *gin.Engine
 	outboxDispatcher *notifications.OutboxDispatcher
-	releaseMonitor   *service.ReleaseMonitor
+	releaseMonitor   *releasetracking.ReleaseMonitor
 }
 
 func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
@@ -128,7 +128,7 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	return &application{
 		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
 		outboxDispatcher: notifications.NewOutboxDispatcher(outboxStore, sender, appMetrics),
-		releaseMonitor: service.NewReleaseMonitor(
+		releaseMonitor: releasetracking.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
 			subscriptionStore,

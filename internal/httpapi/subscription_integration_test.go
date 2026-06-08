@@ -8,13 +8,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github-release-notifier/internal/platform/db/test"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"testing"
 
-	"github-release-notifier/internal/dbtest"
 	"github-release-notifier/internal/domain"
 	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/notifications"
@@ -81,7 +81,7 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 
 	gin.SetMode(gin.TestMode)
 
-	_, db := dbtest.SetupTestPostgres(t)
+	_, db := test.SetupTestPostgres(t)
 	require.NoError(t, appdb.RunMigrations(context.Background(), db, filepath.Join("..", "..", "migrations")))
 
 	renderer, err := notifications.NewTemplateRenderer()

@@ -6,7 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github-release-notifier/internal/dbtest"
+	"github-release-notifier/internal/platform/db/test"
 	"testing"
 
 	"github-release-notifier/internal/notifications"
@@ -17,7 +17,7 @@ import (
 )
 
 func TestOutboxStore_CreateClaimAndMarkSent(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewOutboxStore(db)
 
 	ctx := context.Background()
@@ -40,7 +40,7 @@ func TestOutboxStore_CreateClaimAndMarkSent(t *testing.T) {
 }
 
 func TestOutboxStore_Release_MakesMessageAvailableAgain(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewOutboxStore(db)
 
 	ctx := context.Background()
@@ -64,7 +64,7 @@ func TestOutboxStore_Release_MakesMessageAvailableAgain(t *testing.T) {
 }
 
 func TestOutboxStore_ClaimNextPending_ReturnsOldestPendingMessage(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewOutboxStore(db)
 
 	ctx := context.Background()
@@ -84,10 +84,10 @@ func TestOutboxStore_ClaimNextPending_ReturnsOldestPendingMessage(t *testing.T) 
 }
 
 func TestOutboxStore_Create_UsesTransaction(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewOutboxStore(db)
 
-	tx := dbtest.BeginTestTx(t, db)
+	tx := test.BeginTestTx(t, db)
 	recipientEmail, subject := newOutboxTestMessageIdentity("tx")
 	err := store.Create(dbtx.WithTransactionContext(context.Background(), tx), recipientEmail, notifications.Email{
 		Subject:  subject,

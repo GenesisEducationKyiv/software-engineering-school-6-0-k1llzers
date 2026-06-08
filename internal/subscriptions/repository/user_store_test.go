@@ -4,7 +4,7 @@ package repository
 
 import (
 	"context"
-	"github-release-notifier/internal/dbtest"
+	"github-release-notifier/internal/platform/db/test"
 	"testing"
 
 	dbtx "github-release-notifier/internal/platform/db"
@@ -13,11 +13,11 @@ import (
 )
 
 func TestUserStore_CreateIfNotExists_CreatesUser(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewUserStore(db)
 
 	ctx := context.Background()
-	email := dbtest.NewTestEmail()
+	email := test.NewTestEmail()
 
 	created, err := store.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -28,11 +28,11 @@ func TestUserStore_CreateIfNotExists_CreatesUser(t *testing.T) {
 }
 
 func TestUserStore_CreateIfNotExists_WhenUserAlreadyExists_ReturnsExistingUser(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewUserStore(db)
 
 	ctx := context.Background()
-	email := dbtest.NewTestEmail()
+	email := test.NewTestEmail()
 
 	first, err := store.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
@@ -46,10 +46,10 @@ func TestUserStore_CreateIfNotExists_WhenUserAlreadyExists_ReturnsExistingUser(t
 }
 
 func TestUserStore_CreateIfNotExists_UsesTransaction(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 	store := NewUserStore(db)
 
-	tx := dbtest.BeginTestTx(t, db)
+	tx := test.BeginTestTx(t, db)
 	created, err := store.CreateIfNotExists(dbtx.WithTransactionContext(context.Background(), tx), "tx-user@example.com")
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())

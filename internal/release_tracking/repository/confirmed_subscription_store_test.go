@@ -4,7 +4,7 @@ package repository
 
 import (
 	"context"
-	"github-release-notifier/internal/dbtest"
+	"github-release-notifier/internal/platform/db/test"
 	"testing"
 
 	releasetracking "github-release-notifier/internal/release_tracking"
@@ -14,7 +14,7 @@ import (
 )
 
 func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_ReturnsOnlyConfirmedSubscriptions(t *testing.T) {
-	db := dbtest.SetupTestDB(t)
+	db := test.SetupTestDB(t)
 
 	userStore := subscriptionsrepo.NewUserStore(db)
 	trackedRepositoryStore := NewTrackedRepositoryStore(db)
@@ -22,9 +22,9 @@ func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_Returns
 	confirmedSubscriptionStore := NewConfirmedSubscriptionStore(db)
 
 	ctx := context.Background()
-	firstUserEmail := dbtest.NewTestEmail()
-	secondUserEmail := dbtest.NewTestEmail()
-	repositoryData := dbtest.NewTestRepository()
+	firstUserEmail := test.NewTestEmail()
+	secondUserEmail := test.NewTestEmail()
+	repositoryData := test.NewTestRepository()
 	firstUser, err := userStore.CreateIfNotExists(ctx, firstUserEmail)
 	require.NoError(t, err)
 

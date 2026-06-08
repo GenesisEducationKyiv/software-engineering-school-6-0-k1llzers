@@ -1,6 +1,6 @@
 //go:build integration
 
-package dbtest
+package test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type TestRepository struct {
+type Repository struct {
 	Owner string
 	Name  string
 }
@@ -44,14 +44,14 @@ func NewTestEmail() string {
 	return fmt.Sprintf("test-%s@example.com", uuid.NewString())
 }
 
-func NewTestRepositoryWithPrefix(prefix string) TestRepository {
+func NewTestRepositoryWithPrefix(prefix string) Repository {
 	id := uuid.NewString()[:8]
-	return TestRepository{
+	return Repository{
 		Owner: fmt.Sprintf("%s-owner-%s", prefix, id),
 		Name:  fmt.Sprintf("%s-repo-%s", prefix, id),
 	}
 }
 
-func NewTestRepository() TestRepository {
+func NewTestRepository() Repository {
 	return NewTestRepositoryWithPrefix("test")
 }

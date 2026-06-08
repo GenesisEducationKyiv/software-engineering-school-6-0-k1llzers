@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 
-	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/notifications"
 	appdb "github-release-notifier/internal/platform/db"
+	"github-release-notifier/internal/shared"
 )
 
 type OutboxStore struct {
@@ -66,7 +66,7 @@ func (s *OutboxStore) ClaimNextPending(ctx context.Context, processingTimeoutSec
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return notifications.Email{}, domain.ErrNotFound
+			return notifications.Email{}, shared.ErrNotFound
 		}
 
 		return notifications.Email{}, err

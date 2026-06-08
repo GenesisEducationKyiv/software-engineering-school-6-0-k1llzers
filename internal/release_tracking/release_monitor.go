@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github-release-notifier/internal/domain"
-	appmetrics "github-release-notifier/internal/metrics"
+	appmetrics "github-release-notifier/internal/platform/metrics"
+	"github-release-notifier/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -75,7 +75,7 @@ func (m *ReleaseMonitor) Run(ctx context.Context) {
 
 	for {
 		if err := m.CheckOnce(ctx); err != nil && ctx.Err() == nil {
-			if errors.Is(err, domain.ErrRateLimited) {
+			if errors.Is(err, shared.ErrRateLimited) {
 				slog.WarnContext(ctx, "release monitor hit github rate limit", "backoff", defaultRateLimitBackoff.String(), "error", err)
 				if !sleepContext(ctx, defaultRateLimitBackoff) {
 					return
@@ -112,7 +112,7 @@ func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
 	for _, group := range groupedSubscriptions {
 		err := m.processRepositoryRelease(ctx, group)
 		if err != nil {
-			if errors.Is(err, domain.ErrRateLimited) {
+			if errors.Is(err, shared.ErrRateLimited) {
 				result = classifyReleaseMonitorResult(err)
 				return err
 			}
@@ -158,7 +158,7 @@ func (m *ReleaseMonitor) processRepositoryRelease(ctx context.Context, group con
 }
 
 func mapLatestReleaseError(group confirmedSubscriptionGroup, err error) error {
-	if errors.Is(err, domain.ErrNoReleases) {
+	if errors.Is(err, ErrNoReleases) {
 		return nil
 	}
 
@@ -231,7 +231,7 @@ func classifyReleaseMonitorResult(err error) string {
 	switch {
 	case err == nil:
 		return "success"
-	case errors.Is(err, domain.ErrRateLimited):
+	case errors.Is(err, shared.ErrRateLimited):
 		return "rate_limited"
 	default:
 		return "error"

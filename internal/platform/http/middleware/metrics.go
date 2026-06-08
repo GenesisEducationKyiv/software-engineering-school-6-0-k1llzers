@@ -3,7 +3,7 @@ package middleware
 import (
 	"time"
 
-	appmetrics "github-release-notifier/internal/metrics"
+	appmetrics "github-release-notifier/internal/platform/metrics"
 
 	"github.com/gin-gonic/gin"
 )

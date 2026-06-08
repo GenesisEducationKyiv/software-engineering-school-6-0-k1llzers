@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
-	"github-release-notifier/internal/domain"
 	appdb "github-release-notifier/internal/platform/db"
+	"github-release-notifier/internal/shared"
 	"github-release-notifier/internal/subscriptions"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -42,7 +42,7 @@ func (s *SubscriptionStore) Create(ctx context.Context, userID int64, trackedRep
 
 	if err != nil {
 		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
-			return subscriptions.Subscription{}, domain.ErrAlreadyExists
+			return subscriptions.Subscription{}, subscriptions.ErrAlreadyExists
 		}
 
 		return subscriptions.Subscription{}, err
@@ -75,10 +75,10 @@ func (s *SubscriptionStore) SetConfirmedByTokenAndConfirmedNotTrue(ctx context.C
 			return err
 		}
 		if exists {
-			return domain.ErrInvalidToken
+			return subscriptions.ErrInvalidToken
 		}
 
-		return domain.ErrNotFound
+		return shared.ErrNotFound
 	}
 
 	return nil
@@ -101,7 +101,7 @@ func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cance
 	}
 
 	if rowsAffected == 0 {
-		return domain.ErrNotFound
+		return shared.ErrNotFound
 	}
 
 	return nil

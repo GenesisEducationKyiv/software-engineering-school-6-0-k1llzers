@@ -8,9 +8,9 @@ import (
 	"github-release-notifier/internal/platform/db/test"
 	"testing"
 
-	"github-release-notifier/internal/domain"
 	dbtx "github-release-notifier/internal/platform/db"
 	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
+	"github-release-notifier/internal/shared"
 	"github-release-notifier/internal/subscriptions"
 
 	"github.com/google/uuid"
@@ -93,7 +93,7 @@ func TestSubscriptionStore_Create_DuplicateSubscription(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
-	require.ErrorIs(t, err, domain.ErrAlreadyExists)
+	require.ErrorIs(t, err, subscriptions.ErrAlreadyExists)
 }
 
 func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) {
@@ -149,7 +149,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
-	require.ErrorIs(t, err, domain.ErrInvalidToken)
+	require.ErrorIs(t, err, subscriptions.ErrInvalidToken)
 }
 
 func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_NotFound(t *testing.T) {
@@ -157,7 +157,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_NotFound(t *te
 	subscriptionStore := NewSubscriptionStore(db)
 
 	err := subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(context.Background(), uuid.NewString())
-	require.ErrorIs(t, err, domain.ErrNotFound)
+	require.ErrorIs(t, err, shared.ErrNotFound)
 }
 
 func TestSubscriptionStore_DeleteByCancellationToken(t *testing.T) {
@@ -194,7 +194,7 @@ func TestSubscriptionStore_DeleteByCancellationToken_NotFound(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	err := subscriptionStore.DeleteByCancellationToken(context.Background(), uuid.NewString())
-	require.ErrorIs(t, err, domain.ErrNotFound)
+	require.ErrorIs(t, err, shared.ErrNotFound)
 }
 
 func TestSubscriptionStore_ListByEmail(t *testing.T) {
@@ -259,5 +259,5 @@ func TestSubscriptionStore_Create_ReturnsForeignKeyErrorForUnknownReferences(t *
 
 	_, err := subscriptionStore.Create(context.Background(), 999, 999)
 	require.Error(t, err)
-	require.False(t, errors.Is(err, domain.ErrAlreadyExists))
+	require.False(t, errors.Is(err, subscriptions.ErrAlreadyExists))
 }

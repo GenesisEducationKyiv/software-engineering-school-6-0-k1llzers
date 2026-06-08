@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github-release-notifier/internal/domain"
+	releasetracking "github-release-notifier/internal/release_tracking"
 )
 
 type subscriptionRepository struct {
@@ -41,7 +41,7 @@ func (s *Service) resolveLastSeenTag(ctx context.Context, owner string, repoName
 	if err == nil {
 		return release.TagName, nil
 	}
-	if errors.Is(err, domain.ErrNoReleases) {
+	if errors.Is(err, releasetracking.ErrNoReleases) {
 		return "", nil
 	}
 
@@ -52,7 +52,7 @@ func splitRepositoryFullName(repositoryFullName string) (string, string, error) 
 	parts := strings.Split(repositoryFullName, "/")
 
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-		return "", "", domain.ErrIncorrectRepositoryFormat
+		return "", "", ErrIncorrectRepositoryFormat
 	}
 	return parts[0], parts[1], nil
 }

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github-release-notifier/internal/domain"
-	appmetrics "github-release-notifier/internal/metrics"
+	appmetrics "github-release-notifier/internal/platform/metrics"
+	"github-release-notifier/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -247,7 +247,7 @@ func TestReleaseMonitor_CheckOnce_SkipsRepositoryWithoutReleases(t *testing.T) {
 			},
 		},
 	}
-	gitRepositories := &gitRepositoryProviderStub{releaseErr: domain.ErrNoReleases}
+	gitRepositories := &gitRepositoryProviderStub{releaseErr: ErrNoReleases}
 	notifications := &notificationQueueFactoryStub{}
 
 	service := NewReleaseMonitor(
@@ -324,7 +324,7 @@ func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
 			},
 		},
 	}
-	gitRepositories := &gitRepositoryProviderStub{releaseErr: domain.ErrRateLimited}
+	gitRepositories := &gitRepositoryProviderStub{releaseErr: shared.ErrRateLimited}
 	service := NewReleaseMonitor(
 		&transactionManagerStub{},
 		&trackedRepositoryProviderStub{},
@@ -335,7 +335,7 @@ func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
 	)
 
 	err := service.CheckOnce(context.Background())
-	require.ErrorIs(t, err, domain.ErrRateLimited)
+	require.ErrorIs(t, err, shared.ErrRateLimited)
 	require.Equal(t, 1, gitRepositories.calls)
 	require.Contains(t, err.Error(), "gin-gonic/gin")
 }

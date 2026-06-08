@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github-release-notifier/internal/domain"
-	"github-release-notifier/internal/rules"
+	"github-release-notifier/internal/platform/rules"
+	releasetracking "github-release-notifier/internal/release_tracking"
+	"github-release-notifier/internal/shared"
 )
 
 type apiContract interface {
@@ -32,16 +33,16 @@ func newDefaultAPIContract() defaultAPIContract {
 			"github repository request failed",
 			[]rules.Rule[int, error]{
 				{Match: matchesStatus(http.StatusOK), Handle: noStatusError},
-				{Match: matchesStatus(http.StatusNotFound), Handle: staticStatusError(domain.ErrNotFound)},
-				{Match: matchesAnyStatus(http.StatusTooManyRequests, http.StatusForbidden), Handle: staticStatusError(domain.ErrRateLimited)},
+				{Match: matchesStatus(http.StatusNotFound), Handle: staticStatusError(shared.ErrNotFound)},
+				{Match: matchesAnyStatus(http.StatusTooManyRequests, http.StatusForbidden), Handle: staticStatusError(shared.ErrRateLimited)},
 			},
 		),
 		latestReleaseStatusMatcher: newStatusMatcher(
 			"github latest release request failed",
 			[]rules.Rule[int, error]{
 				{Match: matchesStatus(http.StatusOK), Handle: noStatusError},
-				{Match: matchesStatus(http.StatusNotFound), Handle: staticStatusError(domain.ErrNoReleases)},
-				{Match: matchesAnyStatus(http.StatusTooManyRequests, http.StatusForbidden), Handle: staticStatusError(domain.ErrRateLimited)},
+				{Match: matchesStatus(http.StatusNotFound), Handle: staticStatusError(releasetracking.ErrNoReleases)},
+				{Match: matchesAnyStatus(http.StatusTooManyRequests, http.StatusForbidden), Handle: staticStatusError(shared.ErrRateLimited)},
 			},
 		),
 	}

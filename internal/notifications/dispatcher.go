@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github-release-notifier/internal/domain"
-	appmetrics "github-release-notifier/internal/metrics"
+	appmetrics "github-release-notifier/internal/platform/metrics"
+	"github-release-notifier/internal/shared"
 )
 
 const (
@@ -51,7 +51,7 @@ func (d *OutboxDispatcher) Run(ctx context.Context) {
 
 		email, err := d.store.ClaimNextPending(ctx, defaultOutboxProcessingTimeout)
 		if err != nil {
-			if errors.Is(err, domain.ErrNotFound) {
+			if errors.Is(err, shared.ErrNotFound) {
 				select {
 				case <-ctx.Done():
 					return

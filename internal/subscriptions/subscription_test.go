@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 
-	"github-release-notifier/internal/domain"
 	releasetracking "github-release-notifier/internal/release_tracking"
+	"github-release-notifier/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -256,7 +256,7 @@ func TestSubscriptionService_Subscribe_AllowsRepositoryWithoutReleases(t *testin
 			CancellationToken:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		},
 	}
-	releaseClient := &gitRepositoryProviderStub{releaseErr: domain.ErrNoReleases}
+	releaseClient := &gitRepositoryProviderStub{releaseErr: releasetracking.ErrNoReleases}
 
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
@@ -266,7 +266,7 @@ func TestSubscriptionService_Subscribe_AllowsRepositoryWithoutReleases(t *testin
 }
 
 func TestSubscriptionService_Subscribe_ReturnsRepositoryValidationError(t *testing.T) {
-	expectedErr := domain.ErrRateLimited
+	expectedErr := shared.ErrRateLimited
 	transactionManager := &transactionManagerStub{}
 	users := &userCreatorStub{}
 	repositories := &trackedRepositoryProviderStub{}
@@ -337,7 +337,7 @@ func TestSubscriptionService_Subscribe_ReturnsIncorrectRepositoryFormat(t *testi
 	service := NewService(transactionManager, users, repositories, subscriptions, releaseClient, &confirmationSenderStub{})
 
 	err := service.Subscribe(context.Background(), "test@example.com", "gin-gonic")
-	require.ErrorIs(t, err, domain.ErrIncorrectRepositoryFormat)
+	require.ErrorIs(t, err, ErrIncorrectRepositoryFormat)
 	require.False(t, transactionManager.called)
 }
 
@@ -458,10 +458,10 @@ func TestSplitRepositoryFullName(t *testing.T) {
 		expectErr error
 	}{
 		{name: "valid", input: "gin-gonic/gin", owner: "gin-gonic", repoName: "gin"},
-		{name: "missing slash", input: "gin-gonic", expectErr: domain.ErrIncorrectRepositoryFormat},
-		{name: "too many parts", input: "a/b/c", expectErr: domain.ErrIncorrectRepositoryFormat},
-		{name: "blank owner", input: " /gin", expectErr: domain.ErrIncorrectRepositoryFormat},
-		{name: "blank repo", input: "gin/ ", expectErr: domain.ErrIncorrectRepositoryFormat},
+		{name: "missing slash", input: "gin-gonic", expectErr: ErrIncorrectRepositoryFormat},
+		{name: "too many parts", input: "a/b/c", expectErr: ErrIncorrectRepositoryFormat},
+		{name: "blank owner", input: " /gin", expectErr: ErrIncorrectRepositoryFormat},
+		{name: "blank repo", input: "gin/ ", expectErr: ErrIncorrectRepositoryFormat},
 	}
 
 	for _, tc := range testCases {

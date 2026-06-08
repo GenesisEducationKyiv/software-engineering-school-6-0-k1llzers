@@ -1,8 +1,8 @@
 package httpapi
 
 import (
-	appmetrics "github-release-notifier/internal/metrics"
-	"github-release-notifier/internal/middleware"
+	"github-release-notifier/internal/platform/http/middleware"
+	appmetrics "github-release-notifier/internal/platform/metrics"
 
 	"github.com/gin-gonic/gin"
 )

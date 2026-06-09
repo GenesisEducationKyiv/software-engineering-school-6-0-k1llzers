@@ -24,13 +24,31 @@ type Repository struct {
 func SetupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	_, db := SetupTestPostgres(t)
+	return setupTestDBWithMigrations(t, "app")
+}
+
+func SetupNotificationTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	return setupTestDBWithMigrations(t, "notification")
+}
+
+func setupTestDBWithMigrations(t *testing.T, migrationGroup string) *sql.DB {
+	t.Helper()
+
+	var db *sql.DB
+	switch migrationGroup {
+	case "notification":
+		_, db = SetupNotificationTestPostgres(t)
+	default:
+		_, db = SetupTestPostgres(t)
+	}
 	ctx := context.Background()
 
 	_, currentFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 
-	migrationsDir := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", "migrations"))
+	migrationsDir := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", "migrations", migrationGroup))
 	require.NoError(t, appdb.RunMigrations(ctx, db, migrationsDir))
 
 	return db

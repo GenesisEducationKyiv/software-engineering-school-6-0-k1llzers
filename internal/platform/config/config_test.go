@@ -116,7 +116,7 @@ func TestLoad_UsesDefaultPathWhenEmptyPathProvided(t *testing.T) {
 		require.NoError(t, os.Chdir(wd))
 	})
 
-	err = os.WriteFile("config.yaml", []byte(`
+	err = os.WriteFile("app-config.yaml", []byte(`
 server:
   port: "9191"
 `), 0o644)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -19,20 +20,52 @@ const (
 	sharedPostgresUser          = "test"
 	sharedPostgresPassword      = "test"
 	sharedPostgresDB            = "testdb"
+	notificationTestDB          = "notification_testdb"
 )
 
 var (
 	sharedPostgresOnce      sync.Once
 	sharedPostgresContainer *tcppostgres.PostgresContainer
 	sharedPostgresErr       error
+	notificationDBOnce      sync.Once
+	notificationDBErr       error
 )
 
 func SetupTestPostgres(t *testing.T) (string, *sql.DB) {
 	t.Helper()
 
+	return openSharedTestDatabase(t, sharedPostgresDB)
+}
+
+func SetupNotificationTestPostgres(t *testing.T) (string, *sql.DB) {
+	t.Helper()
+
+	return openSharedTestDatabase(t, notificationTestDB)
+}
+
+func openSharedTestDatabase(t *testing.T, databaseName string) (string, *sql.DB) {
+	t.Helper()
+
 	ctx := context.Background()
 	container := setupSharedTestPostgresContainer(t)
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	adminConnStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+
+	adminDB, err := sql.Open("pgx", adminConnStr)
+	require.NoError(t, err)
+	require.NoError(t, WaitForDB(ctx, adminDB, 30*time.Second))
+	defer func() {
+		require.NoError(t, adminDB.Close())
+	}()
+
+	if databaseName == notificationTestDB {
+		notificationDBOnce.Do(func() {
+			notificationDBErr = ensureDatabaseExists(ctx, adminDB, databaseName)
+			require.NoError(t, notificationDBErr)
+		})
+	}
+
+	connStr, err := connectionStringWithDatabase(adminConnStr, databaseName)
 	require.NoError(t, err)
 
 	db, err := sql.Open("pgx", connStr)
@@ -101,4 +134,28 @@ func WaitForDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {
 	}
 
 	return fmt.Errorf("timed out waiting for db")
+}
+
+func connectionStringWithDatabase(connStr string, databaseName string) (string, error) {
+	parsed, err := url.Parse(connStr)
+	if err != nil {
+		return "", err
+	}
+
+	parsed.Path = "/" + databaseName
+	return parsed.String(), nil
+}
+
+func ensureDatabaseExists(ctx context.Context, db *sql.DB, databaseName string) error {
+	var exists bool
+	err := db.QueryRowContext(ctx, `select exists(select 1 from pg_database where datname = $1)`, databaseName).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	_, err = db.ExecContext(ctx, fmt.Sprintf("create database %s", databaseName))
+	return err
 }

@@ -15,6 +15,8 @@ import (
 	"github-release-notifier/internal/platform/http/api"
 	"github-release-notifier/internal/platform/logging"
 	"github-release-notifier/internal/platform/mail/smtp"
+	integrationoutbox "github-release-notifier/internal/platform/messaging/outbox"
+	"github-release-notifier/internal/platform/messaging/rabbitmq"
 	"github-release-notifier/internal/platform/metrics"
 	"github-release-notifier/internal/release_tracking"
 	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
@@ -72,7 +74,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	startBackgroundWorkers(appCtx, app.outboxDispatcher, app.releaseMonitor)
+	workers := []BackgroundWorker{app.outboxDispatcher, app.releaseMonitor}
+	if app.integrationOutboxPublisher != nil {
+		workers = append(workers, app.integrationOutboxPublisher)
+	}
+	startBackgroundWorkers(appCtx, workers...)
 
 	if err := app.router.Run(":" + cfg.Server.Port); err != nil {
 		logger.Error("run http server", "error", err)
@@ -81,9 +87,10 @@ func main() {
 }
 
 type application struct {
-	router           *gin.Engine
-	outboxDispatcher *notifications.OutboxDispatcher
-	releaseMonitor   *releasetracking.ReleaseMonitor
+	router                     *gin.Engine
+	outboxDispatcher           *notifications.OutboxDispatcher
+	integrationOutboxPublisher *integrationoutbox.PublisherWorker
+	releaseMonitor             *releasetracking.ReleaseMonitor
 }
 
 func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
@@ -111,6 +118,7 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(pg)
 	confirmedSubscriptionStore := releasetrackingrepo.NewConfirmedSubscriptionStore(pg)
 	outboxStore := notificationsrepo.NewOutboxStore(pg)
+	integrationOutboxStore := integrationoutbox.NewStore(pg)
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
 	templateRenderer, err := notifications.NewTemplateRenderer()
 	if err != nil {
@@ -118,6 +126,7 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	}
 
 	sender := newMailSender(cfg.Mail)
+	integrationPublisher := newIntegrationOutboxPublisher(cfg.RabbitMQ, integrationOutboxStore)
 	notificationService := notifications.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
@@ -129,8 +138,9 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	)
 
 	return &application{
-		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
-		outboxDispatcher: notifications.NewOutboxDispatcher(outboxStore, sender, appMetrics),
+		router:                     httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
+		outboxDispatcher:           notifications.NewOutboxDispatcher(outboxStore, sender, appMetrics),
+		integrationOutboxPublisher: integrationPublisher,
 		releaseMonitor: releasetracking.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
@@ -160,6 +170,17 @@ func newMailSender(cfg config.MailConfig) *smtp.Sender {
 		Password: cfg.Password,
 		From:     cfg.From,
 	})
+}
+
+func newIntegrationOutboxPublisher(cfg config.RabbitMQConfig, store *integrationoutbox.Store) *integrationoutbox.PublisherWorker {
+	if cfg.URL == "" {
+		return nil
+	}
+
+	return integrationoutbox.NewPublisherWorker(
+		store,
+		rabbitmq.NewPublisher(cfg.URL, cfg.NotificationExchange),
+	)
 }
 
 func validateMailConfig(cfg config.MailConfig) error {

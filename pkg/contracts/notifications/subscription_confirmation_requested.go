@@ -1,10 +1,6 @@
 package notifications
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "github.com/google/uuid"
 
 type SubscriptionConfirmationRequested struct {
 	RecipientEmail     string    `json:"recipient_email"`
@@ -15,8 +11,7 @@ type SubscriptionConfirmationRequested struct {
 
 func NewSubscriptionConfirmationRequestedMessage(
 	messageID uuid.UUID,
-	occurredAt time.Time,
 	payload SubscriptionConfirmationRequested,
 ) (Envelope, error) {
-	return NewEnvelope(messageID, TypeSubscriptionConfirmationRequested, occurredAt, payload)
+	return NewEnvelope(messageID, TypeSubscriptionConfirmationRequested, payload)
 }

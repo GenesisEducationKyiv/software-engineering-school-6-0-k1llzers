@@ -13,6 +13,7 @@ type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
 	GitHub   GitHubConfig   `yaml:"github"`
+	RabbitMQ RabbitMQConfig `yaml:"rabbitmq"`
 	Mail     MailConfig     `yaml:"mail"`
 	Logging  LoggingConfig  `yaml:"logging"`
 }
@@ -27,6 +28,11 @@ type DatabaseConfig struct {
 
 type GitHubConfig struct {
 	Token string `yaml:"token"`
+}
+
+type RabbitMQConfig struct {
+	URL                  string `yaml:"url"`
+	NotificationExchange string `yaml:"notification_exchange"`
 }
 
 type MailConfig struct {
@@ -53,6 +59,10 @@ func Default() Config {
 		},
 		GitHub: GitHubConfig{
 			Token: "",
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:                  "",
+			NotificationExchange: "notifications",
 		},
 		Mail: MailConfig{
 			Port:       587,
@@ -97,6 +107,10 @@ func applyDefaults(cfg *Config) {
 
 	if cfg.Database.URL == "" {
 		cfg.Database.URL = defaults.Database.URL
+	}
+
+	if cfg.RabbitMQ.NotificationExchange == "" {
+		cfg.RabbitMQ.NotificationExchange = defaults.RabbitMQ.NotificationExchange
 	}
 
 	if cfg.Mail.Port == 0 {

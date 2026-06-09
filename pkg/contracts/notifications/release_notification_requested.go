@@ -1,10 +1,6 @@
 package notifications
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "github.com/google/uuid"
 
 type ReleaseNotificationRequested struct {
 	RecipientEmail     string    `json:"recipient_email"`
@@ -16,8 +12,7 @@ type ReleaseNotificationRequested struct {
 
 func NewReleaseNotificationRequestedMessage(
 	messageID uuid.UUID,
-	occurredAt time.Time,
 	payload ReleaseNotificationRequested,
 ) (Envelope, error) {
-	return NewEnvelope(messageID, TypeReleaseNotificationRequested, occurredAt, payload)
+	return NewEnvelope(messageID, TypeReleaseNotificationRequested, payload)
 }

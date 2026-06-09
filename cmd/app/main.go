@@ -3,15 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"log/slog"
 	"os"
 
 	"github-release-notifier/internal/app/notifications"
-	notificationsrepo "github-release-notifier/internal/app/notifications/repository"
 	"github-release-notifier/internal/app/platform/github"
 	"github-release-notifier/internal/app/platform/http/api"
-	"github-release-notifier/internal/app/platform/mail/smtp"
 	integrationoutbox "github-release-notifier/internal/app/platform/messaging/outbox"
 	"github-release-notifier/internal/app/platform/messaging/rabbitmq"
 	"github-release-notifier/internal/app/platform/metrics"
@@ -74,7 +71,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	workers := []BackgroundWorker{app.outboxDispatcher, app.releaseMonitor}
+	workers := []BackgroundWorker{app.releaseMonitor}
 	if app.integrationOutboxPublisher != nil {
 		workers = append(workers, app.integrationOutboxPublisher)
 	}
@@ -88,7 +85,6 @@ func main() {
 
 type application struct {
 	router                     *gin.Engine
-	outboxDispatcher           *notifications.OutboxDispatcher
 	integrationOutboxPublisher *integrationoutbox.PublisherWorker
 	releaseMonitor             *releasetracking.ReleaseMonitor
 }
@@ -108,26 +104,15 @@ func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
 }
 
 func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics) (*application, error) {
-	if err := validateMailConfig(cfg.Mail); err != nil {
-		return nil, err
-	}
-
 	transactionManager := appdb.NewTransactionManager(pg)
 	userStore := subscriptionsrepo.NewUserStore(pg)
 	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(pg)
 	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(pg)
 	confirmedSubscriptionStore := releasetrackingrepo.NewConfirmedSubscriptionStore(pg)
-	outboxStore := notificationsrepo.NewOutboxStore(pg)
 	integrationOutboxStore := integrationoutbox.NewStore(pg)
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
-	templateRenderer, err := notifications.NewTemplateRenderer()
-	if err != nil {
-		return nil, err
-	}
-
-	sender := newMailSender(cfg.Mail)
 	integrationPublisher := newIntegrationOutboxPublisher(cfg.RabbitMQ, integrationOutboxStore)
-	notificationService := notifications.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
+	notificationService := notifications.NewService(integrationOutboxStore)
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
@@ -139,7 +124,6 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 
 	return &application{
 		router:                     httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
-		outboxDispatcher:           notifications.NewOutboxDispatcher(outboxStore, sender, appMetrics),
 		integrationOutboxPublisher: integrationPublisher,
 		releaseMonitor: releasetracking.NewReleaseMonitor(
 			transactionManager,
@@ -162,16 +146,6 @@ func startBackgroundWorkers(ctx context.Context, workers ...BackgroundWorker) {
 	}
 }
 
-func newMailSender(cfg config.MailConfig) *smtp.Sender {
-	return smtp.NewSender(smtp.Config{
-		Host:     cfg.Host,
-		Port:     cfg.Port,
-		Username: cfg.Username,
-		Password: cfg.Password,
-		From:     cfg.From,
-	})
-}
-
 func newIntegrationOutboxPublisher(cfg config.RabbitMQConfig, store *integrationoutbox.Store) *integrationoutbox.PublisherWorker {
 	if cfg.URL == "" {
 		return nil
@@ -181,17 +155,4 @@ func newIntegrationOutboxPublisher(cfg config.RabbitMQConfig, store *integration
 		store,
 		rabbitmq.NewPublisher(cfg.URL, cfg.NotificationExchange),
 	)
-}
-
-func validateMailConfig(cfg config.MailConfig) error {
-	switch {
-	case cfg.Host == "":
-		return errors.New("mail.host is required")
-	case cfg.From == "":
-		return errors.New("mail.from is required")
-	case cfg.ApiBaseUrl == "":
-		return errors.New("mail.api_base_url is required")
-	default:
-		return nil
-	}
 }

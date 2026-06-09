@@ -4,11 +4,24 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: app
     container_name: "github-release-notifier-app"
     depends_on:
       - db
+      - rabbitmq
     ports:
       - 8080:8080
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: notification-service
+    container_name: "github-release-notifier-notification-service"
+    depends_on:
+      - db
+      - rabbitmq
     restart: unless-stopped
 
   db:
@@ -19,10 +32,19 @@ services:
       - 5433:5432
     volumes:
       - data:/var/lib/postgresql/data
+      - ./docker/postgres/init/create_notification_db.sql:/docker-entrypoint-initdb.d/create_notification_db.sql:ro
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: 1111
       POSTGRES_DB: github_release_notifier
+
+  rabbitmq:
+    image: "rabbitmq:4.1-management"
+    container_name: "github-release-notifier-rabbitmq"
+    restart: unless-stopped
+    ports:
+      - 5672:5672
+      - 15672:15672
 
   prometheus:
     image: "prom/prometheus:v3.11.3"
@@ -69,6 +91,7 @@ services:
     container_name: "github-release-notifier-alloy"
     depends_on:
       - app
+      - notification-service
       - loki
     restart: unless-stopped
     command:

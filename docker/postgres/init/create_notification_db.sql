@@ -1,0 +1,1 @@
+create database github_release_notifier_notification;

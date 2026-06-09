@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github-release-notifier/internal/platform/db/test"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,14 +15,16 @@ import (
 	"testing"
 
 	"github-release-notifier/internal/app/notifications"
-	notificationsrepo "github-release-notifier/internal/app/notifications/repository"
+	integrationoutbox "github-release-notifier/internal/app/platform/messaging/outbox"
 	appmetrics "github-release-notifier/internal/app/platform/metrics"
 	releasetracking "github-release-notifier/internal/app/release_tracking"
 	releasetrackingrepo "github-release-notifier/internal/app/release_tracking/repository"
 	"github-release-notifier/internal/app/subscriptions"
 	subscriptionsrepo "github-release-notifier/internal/app/subscriptions/repository"
 	appdb "github-release-notifier/internal/platform/db"
+	"github-release-notifier/internal/platform/db/test"
 	"github-release-notifier/internal/shared"
+	notificationcontracts "github-release-notifier/pkg/contracts/notifications"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -58,12 +59,6 @@ func (f *githubClientFake) GetLatestRelease(_ context.Context, _ string, _ strin
 	return f.release, nil
 }
 
-type outboxRow struct {
-	RecipientEmail string
-	Subject        string
-	HTMLBody       string
-}
-
 type subscriptionTokens struct {
 	ConfirmationToken string
 	CancellationToken string
@@ -84,9 +79,6 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	db := test.SetupTestDB(t)
 	require.NoError(t, appdb.RunMigrations(context.Background(), db, filepath.Join("..", "..", "..", "..", "..", "migrations", "app")))
 
-	renderer, err := notifications.NewTemplateRenderer()
-	require.NoError(t, err)
-
 	githubClient := &githubClientFake{
 		release: releasetracking.Release{TagName: "v1.11.0"},
 	}
@@ -95,8 +87,8 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	userStore := subscriptionsrepo.NewUserStore(db)
 	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(db)
-	outboxStore := notificationsrepo.NewOutboxStore(db)
-	notificationService := notifications.NewService(renderer, outboxStore, "http://example.test/api")
+	outboxStore := integrationoutbox.NewStore(db)
+	notificationService := notifications.NewService(outboxStore)
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
@@ -134,19 +126,13 @@ func TestSubscriptionAPI_SubscribeQueuesConfirmationEmail(t *testing.T) {
 	requireUserRowCount(t, fixture.db, data.Email, 1)
 	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
-	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireIntegrationOutboxMessageCount(t, fixture.db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 1)
 	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
 	require.Equal(t, 1, fixture.githubClient.repositoryExistsCalls)
 	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
 
 	tokens := requireSubscriptionTokens(t, fixture.db, data.Email, data.Repo)
-	requireOutboxEmail(t, fixture.db, data.Email, outboxRow{
-		RecipientEmail: data.Email,
-		Subject:        "Confirm your GitHub release subscription",
-		HTMLBody:       data.Repo,
-	})
-	requireOutboxEmailContains(t, fixture.db, data.Email, "http://example.test/api/confirm/"+tokens.ConfirmationToken)
-	requireOutboxEmailContains(t, fixture.db, data.Email, "http://example.test/api/unsubscribe/"+tokens.CancellationToken)
+	requireSubscriptionConfirmationMessage(t, fixture.db, data.Email, data.Repo, tokens)
 }
 
 func TestSubscriptionAPI_SubscribeDuplicateDoesNotQueueSecondEmail(t *testing.T) {
@@ -163,7 +149,7 @@ func TestSubscriptionAPI_SubscribeDuplicateDoesNotQueueSecondEmail(t *testing.T)
 	requireUserRowCount(t, fixture.db, data.Email, 1)
 	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
-	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireIntegrationOutboxMessageCount(t, fixture.db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 1)
 }
 
 func TestSubscriptionAPI_Subscribe_IgnoresLatestReleaseLookupError(t *testing.T) {
@@ -179,7 +165,7 @@ func TestSubscriptionAPI_Subscribe_IgnoresLatestReleaseLookupError(t *testing.T)
 	requireUserRowCount(t, fixture.db, data.Email, 1)
 	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
-	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireIntegrationOutboxMessageCount(t, fixture.db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 1)
 	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
 }
 
@@ -222,7 +208,7 @@ func TestSubscriptionAPI_Subscribe_DoesNotInitializeCursorFromLatestRelease(t *t
 	requireUserRowCount(t, fixture.db, data.Email, 1)
 	requireTrackedRepositoryRowCount(t, fixture.db, data.Owner, data.Name, 1)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 1)
-	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireIntegrationOutboxMessageCount(t, fixture.db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 1)
 	requireTrackedRepository(t, fixture.db, data.Owner, data.Name, "")
 	require.Equal(t, 0, fixture.githubClient.latestReleaseCalls)
 }
@@ -329,7 +315,7 @@ func TestSubscriptionAPI_UnsubscribeDeletesSubscription(t *testing.T) {
 	unsubscribeResponse := fixture.get(t, "/api/unsubscribe/"+tokens.CancellationToken)
 	require.Equal(t, http.StatusOK, unsubscribeResponse.Code)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 0)
-	requireOutboxEmailCount(t, fixture.db, data.Email, 1)
+	requireIntegrationOutboxMessageCount(t, fixture.db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 1)
 
 	listAfterUnsubscribe := fixture.get(t, subscriptionListURL(data.Email))
 	require.Equal(t, http.StatusOK, listAfterUnsubscribe.Code)
@@ -388,7 +374,7 @@ func requireNoBusinessDataOrOutbox(t *testing.T, db *sql.DB, data subscriptionTe
 	requireUserRowCount(t, db, data.Email, 0)
 	requireTrackedRepositoryRowCount(t, db, data.Owner, data.Name, 0)
 	requireSubscriptionRowCount(t, db, data.Email, data.Owner, data.Name, 0)
-	requireOutboxEmailCount(t, db, data.Email, 0)
+	requireIntegrationOutboxMessageCount(t, db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 0)
 }
 
 func requireUserRowCount(t *testing.T, db *sql.DB, email string, expectedCount int) {
@@ -435,17 +421,18 @@ func requireSubscriptionRowCount(t *testing.T, db *sql.DB, email string, owner s
 	require.Equal(t, expectedCount, actualCount, "unexpected subscription row count for %s -> %s/%s", email, owner, name)
 }
 
-func requireOutboxEmailCount(t *testing.T, db *sql.DB, recipientEmail string, expectedCount int) {
+func requireIntegrationOutboxMessageCount(t *testing.T, db *sql.DB, recipientEmail string, messageType string, expectedCount int) {
 	t.Helper()
 
 	var actualCount int
 	err := db.QueryRowContext(
 		context.Background(),
-		`select count(*) from mail_outbox where recipient_email = $1`,
+		`select count(*) from integration_outbox where message_type = $1 and payload_json ->> 'recipient_email' = $2`,
+		messageType,
 		recipientEmail,
 	).Scan(&actualCount)
 	require.NoError(t, err)
-	require.Equal(t, expectedCount, actualCount, "unexpected outbox row count for recipient %s", recipientEmail)
+	require.Equal(t, expectedCount, actualCount, "unexpected integration outbox row count for recipient %s and type %s", recipientEmail, messageType)
 }
 
 func requireTrackedRepository(t *testing.T, db *sql.DB, owner string, name string, lastSeenTag string) {
@@ -494,39 +481,31 @@ func requireSubscriptionsListResponse(t *testing.T, response *httptest.ResponseR
 	require.Equal(t, expected, actual)
 }
 
-func requireOutboxEmail(t *testing.T, db *sql.DB, recipientEmail string, expected outboxRow) {
+func requireSubscriptionConfirmationMessage(t *testing.T, db *sql.DB, recipientEmail string, expectedRepo string, tokens subscriptionTokens) {
 	t.Helper()
 
-	actual := requireOutboxEmailRow(t, db, recipientEmail)
-	require.Equal(t, expected.RecipientEmail, actual.RecipientEmail)
-	require.Equal(t, expected.Subject, actual.Subject)
-	require.Contains(t, actual.HTMLBody, expected.HTMLBody)
-}
-
-func requireOutboxEmailContains(t *testing.T, db *sql.DB, recipientEmail string, expectedContent string) {
-	t.Helper()
-
-	actual := requireOutboxEmailRow(t, db, recipientEmail)
-	require.Contains(t, actual.HTMLBody, expectedContent)
-}
-
-func requireOutboxEmailRow(t *testing.T, db *sql.DB, recipientEmail string) outboxRow {
-	t.Helper()
-
-	var result outboxRow
+	var payloadJSON []byte
 	err := db.QueryRowContext(
 		context.Background(),
 		`
-			select recipient_email, subject, html_body
-			from mail_outbox
-			where recipient_email = $1
+			select payload_json
+			from integration_outbox
+			where message_type = $1
+			  and payload_json ->> 'recipient_email' = $2
 			order by id desc
 			limit 1
 		`,
+		string(notificationcontracts.TypeSubscriptionConfirmationRequested),
 		recipientEmail,
-	).Scan(&result.RecipientEmail, &result.Subject, &result.HTMLBody)
+	).Scan(&payloadJSON)
 	require.NoError(t, err)
-	return result
+
+	var payload notificationcontracts.SubscriptionConfirmationRequested
+	require.NoError(t, json.Unmarshal(payloadJSON, &payload))
+	require.Equal(t, recipientEmail, payload.RecipientEmail)
+	require.Equal(t, expectedRepo, payload.RepositoryFullName)
+	require.Equal(t, tokens.ConfirmationToken, payload.ConfirmationToken.String())
+	require.Equal(t, tokens.CancellationToken, payload.CancellationToken.String())
 }
 
 func requireSubscriptionConfirmed(t *testing.T, db *sql.DB, confirmationToken string) {

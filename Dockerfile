@@ -8,11 +8,14 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY migrations ./migrations
-COPY config.yaml ./config.yaml
+COPY pkg ./pkg
+COPY app-config.yaml ./app-config.yaml
+COPY notification-config.yaml ./notification-config.yaml
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/app ./cmd/app
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/notification-service ./cmd/notification-service
 
-FROM alpine:3.22
+FROM alpine:3.22 AS app
 
 WORKDIR /app
 
@@ -20,10 +23,24 @@ RUN adduser -D -H appuser
 
 COPY --from=builder /out/app ./app
 COPY migrations ./migrations
-COPY config.yaml ./config.yaml
+COPY app-config.yaml ./app-config.yaml
 
 USER appuser
 
 EXPOSE 8080
 
 CMD ["./app"]
+
+FROM alpine:3.22 AS notification-service
+
+WORKDIR /app
+
+RUN adduser -D -H appuser
+
+COPY --from=builder /out/notification-service ./notification-service
+COPY migrations ./migrations
+COPY notification-config.yaml ./notification-config.yaml
+
+USER appuser
+
+CMD ["./notification-service"]

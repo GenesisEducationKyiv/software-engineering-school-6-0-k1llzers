@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"os"
 
@@ -39,6 +40,11 @@ func main() {
 		os.Exit(1)
 	}
 	slog.SetDefault(logger)
+
+	if err := validateConfig(cfg); err != nil {
+		logger.Error("validate app config", "error", err)
+		os.Exit(1)
+	}
 
 	appCtx := context.Background()
 	appMetrics, err := metrics.New()
@@ -147,12 +153,25 @@ func startBackgroundWorkers(ctx context.Context, workers ...BackgroundWorker) {
 }
 
 func newIntegrationOutboxPublisher(cfg config.RabbitMQConfig, store *integrationoutbox.Store) *integrationoutbox.PublisherWorker {
-	if cfg.URL == "" {
-		return nil
-	}
-
 	return integrationoutbox.NewPublisherWorker(
 		store,
 		rabbitmq.NewPublisher(cfg.URL, cfg.NotificationExchange),
 	)
+}
+
+func validateConfig(cfg config.Config) error {
+	switch {
+	case cfg.Server.Port == "":
+		return errors.New("server.port is required")
+	case cfg.Database.URL == "":
+		return errors.New("database.url is required")
+	case cfg.RabbitMQ.URL == "":
+		return errors.New("rabbitmq.url is required")
+	case cfg.RabbitMQ.NotificationExchange == "":
+		return errors.New("rabbitmq.notification_exchange is required")
+	case cfg.RabbitMQ.NotificationQueue == "":
+		return errors.New("rabbitmq.notification_queue is required")
+	default:
+		return nil
+	}
 }

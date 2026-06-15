@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +18,7 @@ import (
 )
 
 const (
-	sharedPostgresContainerName = "github-release-notifier-test-postgres"
+	sharedPostgresContainerName = "github-release-notifier-test-postgres-v2"
 	sharedPostgresUser          = "test"
 	sharedPostgresPassword      = "test"
 	sharedPostgresDB            = "testdb"
@@ -27,8 +29,6 @@ var (
 	sharedPostgresOnce      sync.Once
 	sharedPostgresContainer *tcppostgres.PostgresContainer
 	sharedPostgresErr       error
-	notificationDBOnce      sync.Once
-	notificationDBErr       error
 )
 
 func SetupTestPostgres(t *testing.T) (string, *sql.DB) {
@@ -57,13 +57,6 @@ func openSharedTestDatabase(t *testing.T, databaseName string) (string, *sql.DB)
 	defer func() {
 		require.NoError(t, adminDB.Close())
 	}()
-
-	if databaseName == notificationTestDB {
-		notificationDBOnce.Do(func() {
-			notificationDBErr = ensureDatabaseExists(ctx, adminDB, databaseName)
-			require.NoError(t, notificationDBErr)
-		})
-	}
 
 	connStr, err := connectionStringWithDatabase(adminConnStr, databaseName)
 	require.NoError(t, err)
@@ -114,6 +107,7 @@ func setupSharedTestPostgresContainer(t *testing.T) *tcppostgres.PostgresContain
 			context.Background(),
 			"postgres:16-alpine",
 			tcppostgres.WithDatabase(sharedPostgresDB),
+			tcppostgres.WithInitScripts(notificationInitScriptPath()),
 			tcppostgres.WithUsername(sharedPostgresUser),
 			tcppostgres.WithPassword(sharedPostgresPassword),
 			testcontainers.WithReuseByName(sharedPostgresContainerName),
@@ -122,6 +116,15 @@ func setupSharedTestPostgresContainer(t *testing.T) *tcppostgres.PostgresContain
 
 	require.NoError(t, sharedPostgresErr)
 	return sharedPostgresContainer
+}
+
+func notificationInitScriptPath() string {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("resolve init script path")
+	}
+
+	return filepath.Join(filepath.Dir(currentFile), "testdata", "init-notification-db.sql")
 }
 
 func WaitForDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {
@@ -144,18 +147,4 @@ func connectionStringWithDatabase(connStr string, databaseName string) (string, 
 
 	parsed.Path = "/" + databaseName
 	return parsed.String(), nil
-}
-
-func ensureDatabaseExists(ctx context.Context, db *sql.DB, databaseName string) error {
-	var exists bool
-	err := db.QueryRowContext(ctx, `select exists(select 1 from pg_database where datname = $1)`, databaseName).Scan(&exists)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return nil
-	}
-
-	_, err = db.ExecContext(ctx, fmt.Sprintf("create database %s", databaseName))
-	return err
 }

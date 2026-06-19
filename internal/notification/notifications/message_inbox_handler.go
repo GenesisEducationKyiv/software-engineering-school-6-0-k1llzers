@@ -10,8 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
+const defaultInboxProcessingTimeout = 60
+
 type messageInboxStore interface {
-	ClaimForProcessing(ctx context.Context, messageID uuid.UUID, messageType string, payloadJSON json.RawMessage) (bool, error)
+	ClaimForProcessing(ctx context.Context, messageID uuid.UUID, messageType string, payloadJSON json.RawMessage, processingTimeoutSeconds int) (bool, error)
 	MarkProcessed(ctx context.Context, messageID uuid.UUID) error
 	ReleaseProcessing(ctx context.Context, messageID uuid.UUID) error
 }
@@ -48,7 +50,7 @@ func (h *MessageInboxHandler) Handle(ctx context.Context, message notificationco
 		return fmt.Errorf("unsupported notification message type: %s", message.Type)
 	}
 
-	claimed, err := h.inbox.ClaimForProcessing(ctx, message.MessageID, string(message.Type), message.Payload)
+	claimed, err := h.inbox.ClaimForProcessing(ctx, message.MessageID, string(message.Type), message.Payload, defaultInboxProcessingTimeout)
 	if err != nil {
 		return err
 	}

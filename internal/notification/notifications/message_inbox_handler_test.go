@@ -22,14 +22,16 @@ type messageInboxStoreStub struct {
 	messageID     uuid.UUID
 	messageType   string
 	payloadJSON   json.RawMessage
+	timeout       int
 	err           error
 }
 
-func (s *messageInboxStoreStub) ClaimForProcessing(_ context.Context, messageID uuid.UUID, messageType string, payloadJSON json.RawMessage) (bool, error) {
+func (s *messageInboxStoreStub) ClaimForProcessing(_ context.Context, messageID uuid.UUID, messageType string, payloadJSON json.RawMessage, processingTimeoutSeconds int) (bool, error) {
 	s.claimCalled = true
 	s.messageID = messageID
 	s.messageType = messageType
 	s.payloadJSON = payloadJSON
+	s.timeout = processingTimeoutSeconds
 	return s.claimed, s.err
 }
 
@@ -77,6 +79,7 @@ func TestMessageInboxHandler_Handle_ClaimsDeliversAndMarksProcessed(t *testing.T
 	require.False(t, inbox.releaseCalled)
 	require.Equal(t, messageID, inbox.messageID)
 	require.Equal(t, string(notificationcontracts.TypeSubscriptionConfirmationRequested), inbox.messageType)
+	require.Equal(t, defaultInboxProcessingTimeout, inbox.timeout)
 }
 
 func TestMessageInboxHandler_Handle_ReturnsUnsupportedTypeError(t *testing.T) {

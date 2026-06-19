@@ -22,7 +22,7 @@ func TestMessageInboxStore_ClaimForProcessing_CreatesInboxMessage(t *testing.T) 
 	payloadJSON, err := json.Marshal(map[string]string{"value": uuid.NewString()})
 	require.NoError(t, err)
 
-	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON)
+	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
 	require.NoError(t, err)
 	require.True(t, claimed)
 
@@ -45,13 +45,37 @@ func TestMessageInboxStore_ClaimForProcessing_IgnoresDuplicateInProgressMessage(
 	payloadJSON, err := json.Marshal(map[string]string{"value": uuid.NewString()})
 	require.NoError(t, err)
 
-	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON)
+	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
 	require.NoError(t, err)
 	require.True(t, claimed)
 
-	claimed, err = store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON)
+	claimed, err = store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
 	require.NoError(t, err)
 	require.False(t, claimed)
+}
+
+func TestMessageInboxStore_ClaimForProcessing_ReclaimsTimedOutMessage(t *testing.T) {
+	db := dbtest.SetupNotificationTestDB(t)
+	store := NewMessageInboxStore(db)
+
+	messageID := uuid.New()
+	payloadJSON, err := json.Marshal(map[string]string{"value": uuid.NewString()})
+	require.NoError(t, err)
+
+	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	_, err = db.ExecContext(
+		context.Background(),
+		`update message_inbox set processing_started_at = now() - interval '2 minutes' where message_id = $1`,
+		messageID,
+	)
+	require.NoError(t, err)
+
+	claimed, err = store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
+	require.NoError(t, err)
+	require.True(t, claimed)
 }
 
 func TestMessageInboxStore_MarkProcessed_MarksMessageAsProcessed(t *testing.T) {
@@ -62,7 +86,7 @@ func TestMessageInboxStore_MarkProcessed_MarksMessageAsProcessed(t *testing.T) {
 	payloadJSON, err := json.Marshal(map[string]string{"value": uuid.NewString()})
 	require.NoError(t, err)
 
-	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON)
+	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
 	require.NoError(t, err)
 	require.True(t, claimed)
 
@@ -89,14 +113,14 @@ func TestMessageInboxStore_ReleaseProcessing_MakesMessageClaimableAgain(t *testi
 	payloadJSON, err := json.Marshal(map[string]string{"value": uuid.NewString()})
 	require.NoError(t, err)
 
-	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON)
+	claimed, err := store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
 	require.NoError(t, err)
 	require.True(t, claimed)
 
 	err = store.ReleaseProcessing(context.Background(), messageID)
 	require.NoError(t, err)
 
-	claimed, err = store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON)
+	claimed, err = store.ClaimForProcessing(context.Background(), messageID, "subscription.confirmation.requested", payloadJSON, 60)
 	require.NoError(t, err)
 	require.True(t, claimed)
 }

@@ -1,10 +1,18 @@
 package httpapi
 
-import "github.com/gin-gonic/gin"
+import (
+	appmetrics "github-release-notifier/internal/metrics"
+	"github-release-notifier/internal/middleware"
 
-func NewRouter(subscriptionHandler *SubscriptionHandler) *gin.Engine {
+	"github.com/gin-gonic/gin"
+)
+
+func NewRouter(subscriptionHandler *SubscriptionHandler, metricSet *appmetrics.Metrics) *gin.Engine {
 	router := gin.New()
+	router.Use(middleware.RequestMetricsMiddleware(metricSet))
+	router.Use(middleware.RequestLoggerMiddleware())
 	router.Use(gin.Recovery())
+	router.GET("/metrics", gin.WrapH(metricSet.Handler()))
 
 	api := router.Group("/api")
 	api.POST("/subscribe", subscriptionHandler.Create)

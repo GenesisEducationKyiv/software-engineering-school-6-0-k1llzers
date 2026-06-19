@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github-release-notifier/internal/domain"
+	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/readmodel"
 
 	"github.com/google/uuid"
@@ -24,6 +25,7 @@ type ReleaseMonitor struct {
 	subscriptions confirmedSubscriptionReader
 	repositoryAPI latestReleaseReader
 	mailQueue     ReleaseNotificationQueue
+	metrics       *appmetrics.Metrics
 }
 
 type trackedRepositoryTagUpdater interface {
@@ -48,13 +50,19 @@ func NewReleaseMonitor(
 	subscriptions confirmedSubscriptionReader,
 	repositoryAPI latestReleaseReader,
 	mailQueue ReleaseNotificationQueue,
+	metricSet *appmetrics.Metrics,
 ) *ReleaseMonitor {
+	if metricSet == nil {
+		panic("metrics is required")
+	}
+
 	return &ReleaseMonitor{
 		txManager:     txManager,
 		repositories:  repositories,
 		subscriptions: subscriptions,
 		repositoryAPI: repositoryAPI,
 		mailQueue:     mailQueue,
+		metrics:       metricSet,
 	}
 }
 
@@ -65,12 +73,12 @@ func (m *ReleaseMonitor) Run(ctx context.Context) {
 	for {
 		if err := m.CheckOnce(ctx); err != nil && ctx.Err() == nil {
 			if errors.Is(err, domain.ErrRateLimited) {
-				log.Printf("release monitor hit github rate limit, pausing for %s: %v", defaultRateLimitBackoff, err)
+				slog.WarnContext(ctx, "release monitor hit github rate limit", "backoff", defaultRateLimitBackoff.String(), "error", err)
 				if !sleepContext(ctx, defaultRateLimitBackoff) {
 					return
 				}
 			} else {
-				log.Printf("release monitor failed: %v", err)
+				slog.ErrorContext(ctx, "release monitor failed", "error", err)
 			}
 		}
 
@@ -83,8 +91,15 @@ func (m *ReleaseMonitor) Run(ctx context.Context) {
 }
 
 func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
+	startedAt := time.Now()
+	result := "success"
+	defer func() {
+		m.metrics.ObserveReleaseMonitorCheck(ctx, result, time.Since(startedAt))
+	}()
+
 	subscriptions, err := m.subscriptions.ListConfirmedRepositorySubscriptions(ctx)
 	if err != nil {
+		result = classifyReleaseMonitorResult(err)
 		return err
 	}
 
@@ -95,13 +110,19 @@ func (m *ReleaseMonitor) CheckOnce(ctx context.Context) error {
 		err := m.processRepositoryRelease(ctx, group)
 		if err != nil {
 			if errors.Is(err, domain.ErrRateLimited) {
+				result = classifyReleaseMonitorResult(err)
 				return err
 			}
 			checkErrors = append(checkErrors, err)
 		}
 	}
 
-	return errors.Join(checkErrors...)
+	joinedErr := errors.Join(checkErrors...)
+	if joinedErr != nil {
+		result = classifyReleaseMonitorResult(joinedErr)
+	}
+
+	return joinedErr
 }
 
 type confirmedSubscriptionGroup struct {
@@ -200,5 +221,16 @@ func sleepContext(ctx context.Context, delay time.Duration) bool {
 		return false
 	case <-timer.C:
 		return true
+	}
+}
+
+func classifyReleaseMonitorResult(err error) string {
+	switch {
+	case err == nil:
+		return "success"
+	case errors.Is(err, domain.ErrRateLimited):
+		return "rate_limited"
+	default:
+		return "error"
 	}
 }

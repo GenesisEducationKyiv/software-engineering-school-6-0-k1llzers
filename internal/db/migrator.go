@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -50,7 +50,7 @@ func RunMigrations(ctx context.Context, db *sql.DB, dir string) error {
 
 	for _, migration := range migrations {
 		if applied[migration.version] {
-			log.Printf("migration skipped: %s already applied", migration.version)
+			slog.Info("migration skipped", "version", migration.version)
 			continue
 		}
 
@@ -58,7 +58,7 @@ func RunMigrations(ctx context.Context, db *sql.DB, dir string) error {
 			return err
 		}
 
-		log.Printf("migration applied: %s", migration.version)
+		slog.Info("migration applied", "version", migration.version)
 	}
 
 	return nil

@@ -34,6 +34,9 @@ mail:
   password: "pass"
   from: "noreply@example.com"
   api_base_url: "http://localhost:8080/api"
+logging:
+  level: "debug"
+  format: "text"
 `), 0o644)
 	require.NoError(t, err)
 
@@ -48,6 +51,8 @@ mail:
 	require.Equal(t, "pass", cfg.Mail.Password)
 	require.Equal(t, "noreply@example.com", cfg.Mail.From)
 	require.Equal(t, "http://localhost:8080/api", cfg.Mail.ApiBaseUrl)
+	require.Equal(t, "debug", cfg.Logging.Level)
+	require.Equal(t, "text", cfg.Logging.Format)
 }
 
 func TestLoad_AppliesDefaultsForMissingFields(t *testing.T) {
@@ -66,6 +71,9 @@ github:
 	require.Equal(t, Default().Database.URL, cfg.Database.URL)
 	require.Equal(t, "secret", cfg.GitHub.Token)
 	require.Equal(t, Default().Mail.Port, cfg.Mail.Port)
+	require.Equal(t, Default().Mail.ApiBaseUrl, cfg.Mail.ApiBaseUrl)
+	require.Equal(t, Default().Logging.Level, cfg.Logging.Level)
+	require.Equal(t, Default().Logging.Format, cfg.Logging.Format)
 }
 
 func TestLoad_ReturnsErrorForInvalidYAML(t *testing.T) {
@@ -94,6 +102,8 @@ mail:
 	require.Equal(t, "smtp.example.com", cfg.Mail.Host)
 	require.Equal(t, Default().Mail.Port, cfg.Mail.Port)
 	require.Equal(t, Default().Mail.ApiBaseUrl, cfg.Mail.ApiBaseUrl)
+	require.Equal(t, Default().Logging.Level, cfg.Logging.Level)
+	require.Equal(t, Default().Logging.Format, cfg.Logging.Format)
 }
 
 func TestLoad_UsesDefaultPathWhenEmptyPathProvided(t *testing.T) {

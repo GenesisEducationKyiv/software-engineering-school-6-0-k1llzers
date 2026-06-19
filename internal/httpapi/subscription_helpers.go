@@ -30,8 +30,12 @@ func newErrorResponder(ruleSet []rules.Rule[error, errorResponse], defaultStatus
 }
 
 func (r errorResponder) Write(c *gin.Context, err error) {
-	response := rules.Matcher[error, errorResponse](r).Resolve(err)
+	response := r.Resolve(err)
 	c.JSON(response.status, gin.H{"error": response.message})
+}
+
+func (r errorResponder) Resolve(err error) errorResponse {
+	return rules.Matcher[error, errorResponse](r).Resolve(err)
 }
 
 func matchDomainError(target error) func(error) bool {
@@ -85,18 +89,6 @@ var subscriptionCancelErrorResponder = newErrorResponder(
 	http.StatusInternalServerError,
 	"internal server error",
 )
-
-func writeSubscriptionCreateError(c *gin.Context, err error) {
-	subscriptionCreateErrorResponder.Write(c, err)
-}
-
-func writeSubscriptionConfirmError(c *gin.Context, err error) {
-	subscriptionConfirmErrorResponder.Write(c, err)
-}
-
-func writeSubscriptionCancelError(c *gin.Context, err error) {
-	subscriptionCancelErrorResponder.Write(c, err)
-}
 
 func parseRequiredEmail(email string) error {
 	if email == "" {

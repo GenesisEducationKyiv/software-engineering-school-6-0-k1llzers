@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
+	"log/slog"
+	"os"
 
 	"github-release-notifier/internal/config"
 	"github-release-notifier/internal/db"
 	"github-release-notifier/internal/github"
 	"github-release-notifier/internal/httpapi"
+	"github-release-notifier/internal/logging"
 	"github-release-notifier/internal/mail"
+	"github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
 
@@ -18,31 +21,58 @@ import (
 )
 
 func main() {
+	bootstrapLogger, _ := logging.New(config.Default().Logging.Level, config.Default().Logging.Format)
+	slog.SetDefault(bootstrapLogger)
+
 	cfg, err := config.Load("")
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		slog.Error("load config", "error", err)
+		os.Exit(1)
 	}
 
-	appCtx := context.Background()
-	pg, err := openDatabase(appCtx, cfg.Database.URL)
+	logger, err := logging.New(cfg.Logging.Level, cfg.Logging.Format)
 	if err != nil {
-		log.Fatalf("initialize database: %v", err)
+		slog.Error("initialize logger", "error", err, "level", cfg.Logging.Level, "format", cfg.Logging.Format)
+		os.Exit(1)
+	}
+	slog.SetDefault(logger)
+
+	appCtx := context.Background()
+	appMetrics, err := metrics.New()
+	if err != nil {
+		logger.Error("initialize metrics", "error", err)
+		os.Exit(1)
 	}
 	defer func() {
-		if err := pg.Close(); err != nil {
-			log.Printf("close postgres: %v", err)
+		if err := appMetrics.Shutdown(appCtx); err != nil {
+			logger.Warn("shutdown metrics failed", "error", err)
 		}
 	}()
 
-	app, err := buildApplication(pg, cfg)
+	logger.Info("application starting", "port", cfg.Server.Port)
+
+	pg, err := openDatabase(appCtx, cfg.Database.URL)
 	if err != nil {
-		log.Fatalf("build application: %v", err)
+		logger.Error("initialize database", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := pg.Close(); err != nil {
+			logger.Warn("close postgres failed", "error", err)
+		}
+	}()
+
+	app, err := buildApplication(pg, cfg, appMetrics)
+	if err != nil {
+		logger.Error("build application", "error", err)
+		os.Exit(1)
 	}
 
 	startBackgroundWorkers(appCtx, app.outboxDispatcher, app.releaseMonitor)
 
 	if err := app.router.Run(":" + cfg.Server.Port); err != nil {
-		log.Fatalf("run http server: %v", err)
+		logger.Error("run http server", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -66,7 +96,7 @@ func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
 	return pg, nil
 }
 
-func buildApplication(pg *sql.DB, cfg config.Config) (*application, error) {
+func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics) (*application, error) {
 	if err := validateMailConfig(cfg.Mail); err != nil {
 		return nil, err
 	}
@@ -94,14 +124,15 @@ func buildApplication(pg *sql.DB, cfg config.Config) (*application, error) {
 	)
 
 	return &application{
-		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService)),
-		outboxDispatcher: mail.NewOutboxDispatcher(outboxStore, sender),
+		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
+		outboxDispatcher: mail.NewOutboxDispatcher(outboxStore, sender, appMetrics),
 		releaseMonitor: service.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
 			subscriptionStore,
 			githubClient,
 			mailService,
+			appMetrics,
 		),
 	}, nil
 }

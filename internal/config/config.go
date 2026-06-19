@@ -14,6 +14,7 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	GitHub   GitHubConfig   `yaml:"github"`
 	Mail     MailConfig     `yaml:"mail"`
+	Logging  LoggingConfig  `yaml:"logging"`
 }
 
 type ServerConfig struct {
@@ -37,6 +38,11 @@ type MailConfig struct {
 	ApiBaseUrl string `yaml:"api_base_url"`
 }
 
+type LoggingConfig struct {
+	Level  string `yaml:"level"`
+	Format string `yaml:"format"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -51,6 +57,10 @@ func Default() Config {
 		Mail: MailConfig{
 			Port:       587,
 			ApiBaseUrl: "http://localhost:8080/api",
+		},
+		Logging: LoggingConfig{
+			Level:  "info",
+			Format: "json",
 		},
 	}
 }
@@ -91,5 +101,17 @@ func applyDefaults(cfg *Config) {
 
 	if cfg.Mail.Port == 0 {
 		cfg.Mail.Port = defaults.Mail.Port
+	}
+
+	if cfg.Mail.ApiBaseUrl == "" {
+		cfg.Mail.ApiBaseUrl = defaults.Mail.ApiBaseUrl
+	}
+
+	if cfg.Logging.Level == "" {
+		cfg.Logging.Level = defaults.Logging.Level
+	}
+
+	if cfg.Logging.Format == "" {
+		cfg.Logging.Format = defaults.Logging.Format
 	}
 }

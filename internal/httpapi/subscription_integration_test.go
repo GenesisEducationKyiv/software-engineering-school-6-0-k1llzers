@@ -18,6 +18,7 @@ import (
 	"github-release-notifier/internal/dbtest"
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/mail"
+	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
 
@@ -104,7 +105,7 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 
 	return subscriptionAPIFixture{
 		db:           db,
-		router:       NewRouter(NewSubscriptionHandler(subscriptionService)),
+		router:       NewRouter(NewSubscriptionHandler(subscriptionService), newIntegrationTestMetrics(t)),
 		githubClient: githubClient,
 	}
 }
@@ -528,4 +529,16 @@ func requireSubscriptionConfirmed(t *testing.T, db *sql.DB, confirmationToken st
 	).Scan(&confirmed)
 	require.NoError(t, err)
 	require.True(t, confirmed)
+}
+
+func newIntegrationTestMetrics(t *testing.T) *appmetrics.Metrics {
+	t.Helper()
+
+	metricSet, err := appmetrics.New()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, metricSet.Shutdown(context.Background()))
+	})
+
+	return metricSet
 }

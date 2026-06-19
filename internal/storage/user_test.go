@@ -1,3 +1,5 @@
+//go:build integration
+
 package storage
 
 import (
@@ -14,11 +16,12 @@ func TestUserStore_CreateIfNotExists_CreatesUser(t *testing.T) {
 	store := NewUserStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
 
-	created, err := store.CreateIfNotExists(ctx, "test@example.com")
+	created, err := store.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
-	require.Equal(t, "test@example.com", created.Email)
+	require.Equal(t, email, created.Email)
 	require.False(t, created.CreatedAt.IsZero())
 	require.False(t, created.UpdatedAt.IsZero())
 }
@@ -28,11 +31,12 @@ func TestUserStore_CreateIfNotExists_WhenUserAlreadyExists_ReturnsExistingUser(t
 	store := NewUserStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
 
-	first, err := store.CreateIfNotExists(ctx, "test@example.com")
+	first, err := store.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	second, err := store.CreateIfNotExists(ctx, "test@example.com")
+	second, err := store.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID)
 	require.Equal(t, first.Email, second.Email)

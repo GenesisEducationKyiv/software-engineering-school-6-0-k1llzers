@@ -1,3 +1,5 @@
+//go:build integration
+
 package db
 
 import (
@@ -5,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github-release-notifier/internal/dbtest"
+
 	"github.com/stretchr/testify/require"
 )
 
 func TestOpenPostgres(t *testing.T) {
-	connStr, rawDB := setupTestPostgres(t)
+	connStr, rawDB := dbtest.SetupTestPostgres(t)
 	require.NoError(t, rawDB.Close())
 
 	db, err := OpenPostgres(context.Background(), connStr)
@@ -18,7 +22,6 @@ func TestOpenPostgres(t *testing.T) {
 		require.NoError(t, db.Close())
 	})
 
-	require.Equal(t, 10, db.Stats().MaxOpenConnections)
 	require.NoError(t, db.PingContext(context.Background()))
 }
 

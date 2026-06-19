@@ -1,3 +1,5 @@
+//go:build integration
+
 package storage
 
 import (
@@ -21,11 +23,13 @@ func TestSubscriptionStore_Create(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
+	repositoryData := newTestRepository()
 
-	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -47,10 +51,12 @@ func TestSubscriptionStore_Create_UsesTransaction(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	user, err := userStore.CreateIfNotExists(ctx, "tx@example.com")
+	email := newTestEmail()
+	repositoryData := newTestRepository()
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "")
+	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "")
 	require.NoError(t, err)
 
 	tx := beginTestTx(t, db)
@@ -72,11 +78,13 @@ func TestSubscriptionStore_Create_DuplicateSubscription(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
+	repositoryData := newTestRepository()
 
-	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
 	require.NoError(t, err)
 
 	_, err = subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -94,11 +102,13 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
+	repositoryData := newTestRepository()
 
-	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -121,11 +131,13 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
+	repositoryData := newTestRepository()
 
-	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -154,11 +166,13 @@ func TestSubscriptionStore_DeleteByCancellationToken(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
+	repositoryData := newTestRepository()
 
-	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
+	trackedRepository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.0.0")
 	require.NoError(t, err)
 
 	created, err := subscriptionStore.Create(ctx, user.ID, trackedRepository.ID)
@@ -189,14 +203,17 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
+	email := newTestEmail()
+	firstRepoData := newTestRepositoryWithPrefix("a")
+	secondRepoData := newTestRepositoryWithPrefix("z")
 
-	user, err := userStore.CreateIfNotExists(ctx, "test@example.com")
+	user, err := userStore.CreateIfNotExists(ctx, email)
 	require.NoError(t, err)
 
-	firstRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.11.0")
+	firstRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, firstRepoData.Owner, firstRepoData.Name, "v1.11.0")
 	require.NoError(t, err)
 
-	secondRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, "labstack", "echo", "v4.13.4")
+	secondRepo, err := trackedRepositoryStore.CreateIfNotExists(ctx, secondRepoData.Owner, secondRepoData.Name, "v4.13.4")
 	require.NoError(t, err)
 
 	firstSubscription, err := subscriptionStore.Create(ctx, user.ID, firstRepo.ID)
@@ -208,18 +225,18 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())
 	require.NoError(t, err)
 
-	items, err := subscriptionStore.ListByEmail(ctx, "test@example.com")
+	items, err := subscriptionStore.ListByEmail(ctx, email)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
 	require.Equal(t, readmodel.SubscriptionView{
-		Email:       "test@example.com",
-		Repo:        "gin-gonic/gin",
+		Email:       email,
+		Repo:        firstRepoData.Owner + "/" + firstRepoData.Name,
 		Confirmed:   true,
 		LastSeenTag: "v1.11.0",
 	}, items[0])
 	require.Equal(t, readmodel.SubscriptionView{
-		Email:       "test@example.com",
-		Repo:        "labstack/echo",
+		Email:       email,
+		Repo:        secondRepoData.Owner + "/" + secondRepoData.Name,
 		Confirmed:   false,
 		LastSeenTag: "v4.13.4",
 	}, items[1])
@@ -229,7 +246,7 @@ func TestSubscriptionStore_ListByEmail_Empty(t *testing.T) {
 	db := setupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
-	items, err := subscriptionStore.ListByEmail(context.Background(), "missing@example.com")
+	items, err := subscriptionStore.ListByEmail(context.Background(), newTestEmail())
 	require.NoError(t, err)
 	require.Empty(t, items)
 }
@@ -242,13 +259,16 @@ func TestSubscriptionStore_ListConfirmedRepositorySubscriptions_ReturnsOnlyConfi
 	subscriptionStore := NewSubscriptionStore(db)
 
 	ctx := context.Background()
-	firstUser, err := userStore.CreateIfNotExists(ctx, "a@example.com")
+	firstUserEmail := newTestEmail()
+	secondUserEmail := newTestEmail()
+	repositoryData := newTestRepository()
+	firstUser, err := userStore.CreateIfNotExists(ctx, firstUserEmail)
 	require.NoError(t, err)
 
-	secondUser, err := userStore.CreateIfNotExists(ctx, "b@example.com")
+	secondUser, err := userStore.CreateIfNotExists(ctx, secondUserEmail)
 	require.NoError(t, err)
 
-	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.11.0")
+	repository, err := trackedRepositoryStore.CreateIfNotExists(ctx, repositoryData.Owner, repositoryData.Name, "v1.11.0")
 	require.NoError(t, err)
 
 	firstSubscription, err := subscriptionStore.Create(ctx, firstUser.ID, repository.ID)
@@ -262,15 +282,18 @@ func TestSubscriptionStore_ListConfirmedRepositorySubscriptions_ReturnsOnlyConfi
 
 	items, err := subscriptionStore.ListConfirmedRepositorySubscriptions(ctx)
 	require.NoError(t, err)
-	require.Len(t, items, 1)
-	require.Equal(t, readmodel.ConfirmedRepositorySubscription{
+	expected := readmodel.ConfirmedRepositorySubscription{
 		TrackedRepositoryID: repository.ID,
-		Owner:               "gin-gonic",
-		Name:                "gin",
+		Owner:               repositoryData.Owner,
+		Name:                repositoryData.Name,
 		LastSeenTag:         "v1.11.0",
-		Email:               "a@example.com",
+		Email:               firstUserEmail,
 		CancellationToken:   firstSubscription.CancellationToken,
-	}, items[0])
+	}
+	require.Contains(t, items, expected)
+	for _, item := range items {
+		require.NotEqual(t, secondUserEmail, item.Email)
+	}
 	require.NotEqual(t, firstSubscription.CancellationToken, secondSubscription.CancellationToken)
 }
 

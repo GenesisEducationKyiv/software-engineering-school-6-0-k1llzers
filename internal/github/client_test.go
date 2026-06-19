@@ -1,3 +1,5 @@
+//go:build unit
+
 package github
 
 import (
@@ -177,5 +179,8 @@ func TestNewClientWithBaseURL_TrimRightSlash(t *testing.T) {
 
 	require.Equal(t, "https://api.github.com", client.baseURL)
 	require.NotNil(t, client.httpClient)
-	require.Equal(t, "github-release-notifier", client.userAgent)
+	contract, ok := client.api.(defaultAPIContract)
+	require.True(t, ok)
+	require.Equal(t, "github-release-notifier", contract.userAgent)
+	require.Equal(t, "2026-03-10", contract.apiVersion)
 }

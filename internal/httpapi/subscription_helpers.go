@@ -7,40 +7,31 @@ import (
 
 	"github-release-notifier/internal/domain"
 	"github-release-notifier/internal/readmodel"
+	"github-release-notifier/internal/rules"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-type errorResponseRule struct {
-	match   func(error) bool
+type errorResponse struct {
 	status  int
-	message func(error) string
+	message string
 }
 
-type errorResponder struct {
-	rules          []errorResponseRule
-	defaultStatus  int
-	defaultMessage string
-}
+type errorResponder rules.Matcher[error, errorResponse]
 
-func newErrorResponder(rules []errorResponseRule, defaultStatus int, defaultMessage string) errorResponder {
-	return errorResponder{
-		rules:          rules,
-		defaultStatus:  defaultStatus,
-		defaultMessage: defaultMessage,
-	}
+func newErrorResponder(ruleSet []rules.Rule[error, errorResponse], defaultStatus int, defaultMessage string) errorResponder {
+	return errorResponder(rules.NewMatcher(ruleSet, func(error) errorResponse {
+		return errorResponse{
+			status:  defaultStatus,
+			message: defaultMessage,
+		}
+	}))
 }
 
 func (r errorResponder) Write(c *gin.Context, err error) {
-	for _, rule := range r.rules {
-		if rule.match(err) {
-			c.JSON(rule.status, gin.H{"error": rule.message(err)})
-			return
-		}
-	}
-
-	c.JSON(r.defaultStatus, gin.H{"error": r.defaultMessage})
+	response := rules.Matcher[error, errorResponse](r).Resolve(err)
+	c.JSON(response.status, gin.H{"error": response.message})
 }
 
 func matchDomainError(target error) func(error) bool {
@@ -49,39 +40,47 @@ func matchDomainError(target error) func(error) bool {
 	}
 }
 
-func errorMessage(err error) string {
-	return err.Error()
+func withErrorMessage(status int) func(error) errorResponse {
+	return func(err error) errorResponse {
+		return errorResponse{
+			status:  status,
+			message: err.Error(),
+		}
+	}
 }
 
-func staticMessage(message string) func(error) string {
-	return func(error) string {
-		return message
+func withStaticMessage(status int, message string) func(error) errorResponse {
+	return func(error) errorResponse {
+		return errorResponse{
+			status:  status,
+			message: message,
+		}
 	}
 }
 
 var subscriptionCreateErrorResponder = newErrorResponder(
-	[]errorResponseRule{
-		{match: matchDomainError(domain.ErrIncorrectRepositoryFormat), status: http.StatusBadRequest, message: errorMessage},
-		{match: matchDomainError(domain.ErrAlreadyExists), status: http.StatusConflict, message: errorMessage},
-		{match: matchDomainError(domain.ErrNotFound), status: http.StatusNotFound, message: errorMessage},
-		{match: matchDomainError(domain.ErrRateLimited), status: http.StatusServiceUnavailable, message: staticMessage("github is temporarily unavailable, please try again later")},
+	[]rules.Rule[error, errorResponse]{
+		{Match: matchDomainError(domain.ErrIncorrectRepositoryFormat), Handle: withErrorMessage(http.StatusBadRequest)},
+		{Match: matchDomainError(domain.ErrAlreadyExists), Handle: withErrorMessage(http.StatusConflict)},
+		{Match: matchDomainError(domain.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
+		{Match: matchDomainError(domain.ErrRateLimited), Handle: withStaticMessage(http.StatusServiceUnavailable, "github is temporarily unavailable, please try again later")},
 	},
 	http.StatusInternalServerError,
 	"internal server error",
 )
 
 var subscriptionConfirmErrorResponder = newErrorResponder(
-	[]errorResponseRule{
-		{match: matchDomainError(domain.ErrInvalidToken), status: http.StatusBadRequest, message: errorMessage},
-		{match: matchDomainError(domain.ErrNotFound), status: http.StatusNotFound, message: errorMessage},
+	[]rules.Rule[error, errorResponse]{
+		{Match: matchDomainError(domain.ErrInvalidToken), Handle: withErrorMessage(http.StatusBadRequest)},
+		{Match: matchDomainError(domain.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
 	},
 	http.StatusInternalServerError,
 	"internal server error",
 )
 
 var subscriptionCancelErrorResponder = newErrorResponder(
-	[]errorResponseRule{
-		{match: matchDomainError(domain.ErrNotFound), status: http.StatusNotFound, message: errorMessage},
+	[]rules.Rule[error, errorResponse]{
+		{Match: matchDomainError(domain.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
 	},
 	http.StatusInternalServerError,
 	"internal server error",

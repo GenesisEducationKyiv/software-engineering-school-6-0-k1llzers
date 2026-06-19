@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github-release-notifier/internal/domain"
+	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/outbox"
 
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,7 @@ func TestOutboxDispatcher_Run_SendsAndMarksSent(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	sender := &senderStub{cancelOnSend: cancel}
-	dispatcher := NewOutboxDispatcher(store, sender)
+	dispatcher := NewOutboxDispatcher(store, sender, newTestMetrics(t))
 
 	dispatcher.Run(ctx)
 
@@ -111,7 +112,7 @@ func TestOutboxDispatcher_Run_ReleasesEmailWhenSendFails(t *testing.T) {
 			time.AfterFunc(10*time.Millisecond, cancel)
 		},
 	}
-	dispatcher := NewOutboxDispatcher(store, sender)
+	dispatcher := NewOutboxDispatcher(store, sender, newTestMetrics(t))
 
 	dispatcher.Run(ctx)
 
@@ -127,10 +128,22 @@ func TestOutboxDispatcher_Run_StopsImmediatelyWhenContextCancelled(t *testing.T)
 
 	store := &outboxStoreStub{}
 	sender := &senderStub{}
-	dispatcher := NewOutboxDispatcher(store, sender)
+	dispatcher := NewOutboxDispatcher(store, sender, newTestMetrics(t))
 
 	dispatcher.Run(ctx)
 
 	require.Zero(t, store.claimCalls)
 	require.Zero(t, sender.calls)
+}
+
+func newTestMetrics(t *testing.T) *appmetrics.Metrics {
+	t.Helper()
+
+	metricSet, err := appmetrics.New()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, metricSet.Shutdown(context.Background()))
+	})
+
+	return metricSet
 }

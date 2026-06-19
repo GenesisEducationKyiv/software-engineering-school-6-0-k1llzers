@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github-release-notifier/internal/domain"
+	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/readmodel"
 
 	"github.com/google/uuid"
@@ -49,6 +50,7 @@ func TestReleaseMonitor_CheckOnce_QueuesEmailsAndUpdatesTag(t *testing.T) {
 		subscriptions,
 		gitRepositories,
 		notifications,
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -89,6 +91,7 @@ func TestReleaseMonitor_CheckOnce_SkipsSameTag(t *testing.T) {
 		subscriptions,
 		gitRepositories,
 		notifications,
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -118,6 +121,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsTransactionError(t *testing.T) {
 		subscriptions,
 		&gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}},
 		&notificationQueueFactoryStub{queueErr: expectedErr},
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -132,6 +136,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsListError(t *testing.T) {
 		&subscriptionCreatorStub{err: expectedErr},
 		&gitRepositoryProviderStub{},
 		&notificationQueueFactoryStub{},
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -162,6 +167,7 @@ func TestReleaseMonitor_CheckOnce_SkipsRepositoryWithoutReleases(t *testing.T) {
 		subscriptions,
 		gitRepositories,
 		notifications,
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -198,6 +204,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsJoinedRepositoryErrors(t *testing.T) {
 		subscriptions,
 		&gitRepositoryProviderStub{releaseErr: expectedErr},
 		&notificationQueueFactoryStub{},
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -235,6 +242,7 @@ func TestReleaseMonitor_CheckOnce_StopsOnRateLimit(t *testing.T) {
 		subscriptions,
 		gitRepositories,
 		&notificationQueueFactoryStub{},
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -272,6 +280,7 @@ func TestReleaseMonitor_CheckOnce_UsesReleaseHTMLURLWhenPresent(t *testing.T) {
 		subscriptions,
 		gitRepositories,
 		notifications,
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -303,6 +312,7 @@ func TestReleaseMonitor_CheckOnce_ReturnsUpdateLastSeenTagError(t *testing.T) {
 		subscriptions,
 		&gitRepositoryProviderStub{result: domain.Release{TagName: "v1.11.0"}},
 		&notificationQueueFactoryStub{},
+		newTestMetrics(t),
 	)
 
 	err := service.CheckOnce(context.Background())
@@ -361,6 +371,18 @@ func TestSleepContext_ReturnsFalseWhenContextCancelled(t *testing.T) {
 	cancel()
 
 	require.False(t, sleepContext(ctx, time.Second))
+}
+
+func newTestMetrics(t *testing.T) *appmetrics.Metrics {
+	t.Helper()
+
+	metricSet, err := appmetrics.New()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, metricSet.Shutdown(context.Background()))
+	})
+
+	return metricSet
 }
 
 type releaseCall struct {

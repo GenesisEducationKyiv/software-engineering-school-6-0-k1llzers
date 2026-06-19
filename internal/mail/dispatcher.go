@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github-release-notifier/internal/domain"
+	appmetrics "github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/outbox"
 )
 
@@ -22,14 +23,20 @@ type outboxStore interface {
 }
 
 type OutboxDispatcher struct {
-	store  outboxStore
-	sender Sender
+	store   outboxStore
+	sender  Sender
+	metrics *appmetrics.Metrics
 }
 
-func NewOutboxDispatcher(store outboxStore, sender Sender) *OutboxDispatcher {
+func NewOutboxDispatcher(store outboxStore, sender Sender, metricSet *appmetrics.Metrics) *OutboxDispatcher {
+	if metricSet == nil {
+		panic("metrics is required")
+	}
+
 	return &OutboxDispatcher{
-		store:  store,
-		sender: sender,
+		store:   store,
+		sender:  sender,
+		metrics: metricSet,
 	}
 }
 
@@ -59,20 +66,29 @@ func (d *OutboxDispatcher) Run(ctx context.Context) {
 			}
 		}
 
+		processingStartedAt := time.Now()
 		sendErr := d.sender.Send(ctx, email.RecipientEmail, RenderedEmail{
 			Subject:  email.Subject,
 			HTMLBody: email.HTMLBody,
 		})
+		dispatchDuration := time.Since(processingStartedAt)
 		if sendErr != nil {
 			if err := d.store.Release(ctx, email.ID, sendErr.Error()); err != nil {
+				d.metrics.ObserveOutboxDispatch(ctx, "release_failed", dispatchDuration)
 				slog.ErrorContext(ctx, "mail outbox release failed", "email_id", email.ID, "error", err)
+				continue
 			}
+			d.metrics.ObserveOutboxDispatch(ctx, "send_failed", dispatchDuration)
 			slog.WarnContext(ctx, "mail send failed", "email_id", email.ID, "error", sendErr)
 			continue
 		}
 
 		if err := d.store.MarkSent(ctx, email.ID); err != nil {
+			d.metrics.ObserveOutboxDispatch(ctx, "mark_sent_failed", dispatchDuration)
 			slog.ErrorContext(ctx, "mail outbox mark sent failed", "email_id", email.ID, "error", err)
+			continue
 		}
+
+		d.metrics.ObserveOutboxDispatch(ctx, "success", dispatchDuration)
 	}
 }

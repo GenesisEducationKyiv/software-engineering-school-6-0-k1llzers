@@ -13,6 +13,7 @@ import (
 	"github-release-notifier/internal/httpapi"
 	"github-release-notifier/internal/logging"
 	"github-release-notifier/internal/mail"
+	"github-release-notifier/internal/metrics"
 	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
 
@@ -36,9 +37,20 @@ func main() {
 	}
 	slog.SetDefault(logger)
 
+	appCtx := context.Background()
+	appMetrics, err := metrics.New()
+	if err != nil {
+		logger.Error("initialize metrics", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := appMetrics.Shutdown(appCtx); err != nil {
+			logger.Warn("shutdown metrics failed", "error", err)
+		}
+	}()
+
 	logger.Info("application starting", "port", cfg.Server.Port)
 
-	appCtx := context.Background()
 	pg, err := openDatabase(appCtx, cfg.Database.URL)
 	if err != nil {
 		logger.Error("initialize database", "error", err)
@@ -50,7 +62,7 @@ func main() {
 		}
 	}()
 
-	app, err := buildApplication(pg, cfg)
+	app, err := buildApplication(pg, cfg, appMetrics)
 	if err != nil {
 		logger.Error("build application", "error", err)
 		os.Exit(1)
@@ -84,7 +96,7 @@ func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
 	return pg, nil
 }
 
-func buildApplication(pg *sql.DB, cfg config.Config) (*application, error) {
+func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics) (*application, error) {
 	if err := validateMailConfig(cfg.Mail); err != nil {
 		return nil, err
 	}
@@ -112,14 +124,15 @@ func buildApplication(pg *sql.DB, cfg config.Config) (*application, error) {
 	)
 
 	return &application{
-		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService)),
-		outboxDispatcher: mail.NewOutboxDispatcher(outboxStore, sender),
+		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
+		outboxDispatcher: mail.NewOutboxDispatcher(outboxStore, sender, appMetrics),
 		releaseMonitor: service.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
 			subscriptionStore,
 			githubClient,
 			mailService,
+			appMetrics,
 		),
 	}, nil
 }

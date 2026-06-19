@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	dbtx "github-release-notifier/internal/db"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -12,7 +14,7 @@ func TestTrackedRepositoryStore_CreateIfNotExists_CreatesRepository(t *testing.T
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	created, err := store.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	created, err := store.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 	require.NotZero(t, created.ID)
 	require.Equal(t, "gin-gonic", created.Owner)
@@ -26,10 +28,10 @@ func TestTrackedRepositoryStore_CreateIfNotExists_ReturnsExistingRepositoryWitho
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	first, err := store.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v1.0.0")
+	first, err := store.CreateIfNotExists(ctx, "gin-gonic", "gin", "v1.0.0")
 	require.NoError(t, err)
 
-	second, err := store.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "v2.0.0")
+	second, err := store.CreateIfNotExists(ctx, "gin-gonic", "gin", "v2.0.0")
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID)
 	require.NotNil(t, second.LastSeenTag)
@@ -42,10 +44,10 @@ func TestTrackedRepositoryStore_UpdateLastSeenTag_UpdatesRepository(t *testing.T
 	store := NewTrackedRepositoryStore(db)
 
 	ctx := context.Background()
-	repository, err := store.CreateIfNotExists(ctx, nil, "gin-gonic", "gin", "")
+	repository, err := store.CreateIfNotExists(ctx, "gin-gonic", "gin", "")
 	require.NoError(t, err)
 
-	err = store.UpdateLastSeenTag(ctx, nil, repository.ID, "v1.11.0")
+	err = store.UpdateLastSeenTag(ctx, repository.ID, "v1.11.0")
 	require.NoError(t, err)
 
 	var lastSeenTag string
@@ -61,10 +63,11 @@ func TestTrackedRepositoryStore_MethodsUseTransaction(t *testing.T) {
 	ctx := context.Background()
 	tx := beginTestTx(t, db)
 
-	repository, err := store.CreateIfNotExists(ctx, tx, "labstack", "echo", "")
+	txCtx := dbtx.WithTransactionContext(ctx, tx)
+	repository, err := store.CreateIfNotExists(txCtx, "labstack", "echo", "")
 	require.NoError(t, err)
 
-	err = store.UpdateLastSeenTag(ctx, tx, repository.ID, "v4.13.4")
+	err = store.UpdateLastSeenTag(txCtx, repository.ID, "v4.13.4")
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
 

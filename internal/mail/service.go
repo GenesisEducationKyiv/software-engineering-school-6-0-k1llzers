@@ -2,7 +2,6 @@ package mail
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github-release-notifier/internal/outbox"
@@ -11,20 +10,11 @@ import (
 )
 
 type renderer interface {
-	RenderConfirmationEmail(data ConfirmationTemplateData) (RenderedEmail, error)
-	RenderReleaseEmail(data ReleaseTemplateData) (RenderedEmail, error)
+	Render(kind string, data any) (RenderedEmail, error)
 }
 
 type outboxWriter interface {
-	Create(ctx context.Context, tx *sql.Tx, recipientEmail string, email outbox.Email) error
-}
-
-type ConfirmationQueue interface {
-	QueueSubscriptionConfirmation(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error
-}
-
-type ReleaseNotificationQueue interface {
-	QueueReleaseNotification(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error
+	Create(ctx context.Context, recipientEmail string, email outbox.Email) error
 }
 
 type Service struct {
@@ -41,35 +31,34 @@ func NewService(renderer renderer, outbox outboxWriter, apiBaseURL string) *Serv
 	}
 }
 
-func (s *Service) QueueSubscriptionConfirmation(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
-	email, err := s.renderer.RenderConfirmationEmail(ConfirmationTemplateData{
+func (s *Service) QueueSubscriptionConfirmation(ctx context.Context, recipientEmail string, repositoryFullName string, confirmationToken uuid.UUID, cancellationToken uuid.UUID) error {
+	return s.queueTemplate(ctx, recipientEmail, templateKindConfirmation, ConfirmationTemplateData{
 		RepositoryFullName: repositoryFullName,
 		ConfirmationURL:    s.urls.confirmationURL(confirmationToken),
 		CancellationURL:    s.urls.cancellationURL(cancellationToken),
 	})
-	if err != nil {
-		return fmt.Errorf("render confirmation email: %w", err)
-	}
-
-	return s.enqueue(ctx, tx, recipientEmail, email, "confirmation")
 }
 
-func (s *Service) QueueReleaseNotification(ctx context.Context, tx *sql.Tx, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
-	email, err := s.renderer.RenderReleaseEmail(ReleaseTemplateData{
+func (s *Service) QueueReleaseNotification(ctx context.Context, recipientEmail string, repositoryFullName string, tagName string, releaseURL string, cancellationToken uuid.UUID) error {
+	return s.queueTemplate(ctx, recipientEmail, templateKindRelease, ReleaseTemplateData{
 		RepositoryFullName: repositoryFullName,
 		TagName:            tagName,
 		ReleaseURL:         releaseURL,
 		CancellationURL:    s.urls.cancellationURL(cancellationToken),
 	})
-	if err != nil {
-		return fmt.Errorf("render release email: %w", err)
-	}
-
-	return s.enqueue(ctx, tx, recipientEmail, email, "release")
 }
 
-func (s *Service) enqueue(ctx context.Context, tx *sql.Tx, recipientEmail string, email RenderedEmail, kind string) error {
-	if err := s.outbox.Create(ctx, tx, recipientEmail, toOutboxEmail(email)); err != nil {
+func (s *Service) queueTemplate(ctx context.Context, recipientEmail string, kind string, data any) error {
+	email, err := s.renderer.Render(kind, data)
+	if err != nil {
+		return fmt.Errorf("render %s email: %w", kind, err)
+	}
+
+	return s.enqueue(ctx, recipientEmail, email, kind)
+}
+
+func (s *Service) enqueue(ctx context.Context, recipientEmail string, email RenderedEmail, kind string) error {
+	if err := s.outbox.Create(ctx, recipientEmail, toOutboxEmail(email)); err != nil {
 		return fmt.Errorf("enqueue %s email: %w", kind, err)
 	}
 

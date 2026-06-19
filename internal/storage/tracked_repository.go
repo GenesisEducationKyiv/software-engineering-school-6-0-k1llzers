@@ -15,7 +15,7 @@ func NewTrackedRepositoryStore(db *sql.DB) *TrackedRepositoryStore {
 	return &TrackedRepositoryStore{db: db}
 }
 
-func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, tx *sql.Tx, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
+func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, owner string, name string, lastSeenTag string) (domain.TrackedRepository, error) {
 	query := `
 		insert into tracked_repositories (owner, name, last_seen_tag)
 		values ($1, $2, $3)
@@ -27,7 +27,7 @@ func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, tx *sql.
 
 	var created domain.TrackedRepository
 
-	err := newQueryExecutor(s.db, tx).QueryRowContext(ctx, query, owner, name, lastSeenTag).Scan(
+	err := newQueryExecutor(ctx, s.db).QueryRowContext(ctx, query, owner, name, lastSeenTag).Scan(
 		&created.ID,
 		&created.Owner,
 		&created.Name,
@@ -42,7 +42,7 @@ func (s *TrackedRepositoryStore) CreateIfNotExists(ctx context.Context, tx *sql.
 	return created, nil
 }
 
-func (s *TrackedRepositoryStore) UpdateLastSeenTag(ctx context.Context, tx *sql.Tx, trackedRepositoryID int64, lastSeenTag string) error {
+func (s *TrackedRepositoryStore) UpdateLastSeenTag(ctx context.Context, trackedRepositoryID int64, lastSeenTag string) error {
 	query := `
 		update tracked_repositories
 		set last_seen_tag = $2,
@@ -50,6 +50,6 @@ func (s *TrackedRepositoryStore) UpdateLastSeenTag(ctx context.Context, tx *sql.
 		where id = $1;
 	`
 
-	_, err := newQueryExecutor(s.db, tx).ExecContext(ctx, query, trackedRepositoryID, lastSeenTag)
+	_, err := newQueryExecutor(ctx, s.db).ExecContext(ctx, query, trackedRepositoryID, lastSeenTag)
 	return err
 }

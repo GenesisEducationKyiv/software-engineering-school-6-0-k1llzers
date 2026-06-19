@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 
@@ -17,7 +16,8 @@ func TestTransactionManager_WithinTransaction_Commits(t *testing.T) {
 	_, err := db.ExecContext(ctx, `create table tx_test (value integer not null)`)
 	require.NoError(t, err)
 
-	err = manager.WithinTransaction(ctx, func(tx *sql.Tx) error {
+	err = manager.WithinTransaction(ctx, func(ctx context.Context) error {
+		tx := TxFromContext(ctx)
 		_, execErr := tx.ExecContext(ctx, `insert into tx_test (value) values (1)`)
 		return execErr
 	})
@@ -38,7 +38,8 @@ func TestTransactionManager_WithinTransaction_RollsBackOnError(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedErr := errors.New("boom")
-	err = manager.WithinTransaction(ctx, func(tx *sql.Tx) error {
+	err = manager.WithinTransaction(ctx, func(ctx context.Context) error {
+		tx := TxFromContext(ctx)
 		_, execErr := tx.ExecContext(ctx, `insert into tx_test (value) values (1)`)
 		require.NoError(t, execErr)
 		return expectedErr
@@ -60,7 +61,8 @@ func TestTransactionManager_WithinTransaction_RollsBackOnPanic(t *testing.T) {
 	require.NoError(t, err)
 
 	require.PanicsWithValue(t, "panic in transaction", func() {
-		_ = manager.WithinTransaction(ctx, func(tx *sql.Tx) error {
+		_ = manager.WithinTransaction(ctx, func(ctx context.Context) error {
+			tx := TxFromContext(ctx)
 			_, execErr := tx.ExecContext(ctx, `insert into tx_test (value) values (1)`)
 			require.NoError(t, execErr)
 			panic("panic in transaction")

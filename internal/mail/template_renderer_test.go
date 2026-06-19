@@ -10,7 +10,7 @@ func TestTemplateRenderer_RenderConfirmationEmail(t *testing.T) {
 	renderer, err := NewTemplateRenderer()
 	require.NoError(t, err)
 
-	email, err := renderer.RenderConfirmationEmail(ConfirmationTemplateData{
+	email, err := renderer.Render(templateKindConfirmation, ConfirmationTemplateData{
 		RepositoryFullName: "gin-gonic/gin",
 		ConfirmationURL:    "http://localhost:8080/confirm/abc",
 		CancellationURL:    "http://localhost:8080/unsubscribe/def",
@@ -27,7 +27,7 @@ func TestTemplateRenderer_RenderReleaseEmail(t *testing.T) {
 	renderer, err := NewTemplateRenderer()
 	require.NoError(t, err)
 
-	email, err := renderer.RenderReleaseEmail(ReleaseTemplateData{
+	email, err := renderer.Render(templateKindRelease, ReleaseTemplateData{
 		RepositoryFullName: "gin-gonic/gin",
 		TagName:            "v1.11.0",
 		ReleaseURL:         "https://github.com/gin-gonic/gin/releases/tag/v1.11.0",
@@ -37,4 +37,12 @@ func TestTemplateRenderer_RenderReleaseEmail(t *testing.T) {
 	require.Equal(t, "New release for gin-gonic/gin: v1.11.0", email.Subject)
 	require.Contains(t, email.HTMLBody, "New release available")
 	require.Contains(t, email.HTMLBody, "https://github.com/gin-gonic/gin/releases/tag/v1.11.0")
+}
+
+func TestTemplateRenderer_Render_ReturnsErrorForUnknownKind(t *testing.T) {
+	renderer, err := NewTemplateRenderer()
+	require.NoError(t, err)
+
+	_, err = renderer.Render("unknown", struct{}{})
+	require.EqualError(t, err, "unknown template kind: unknown")
 }

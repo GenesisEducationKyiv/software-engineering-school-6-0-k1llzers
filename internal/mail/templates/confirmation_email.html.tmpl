@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ .Subject }}</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#f4f7fb;font-family:Arial,sans-serif;color:#172033;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:12px;padding:40px 32px;">
+          <tr>
+            <td>
+              <h1 style="margin:0 0 20px;font-size:24px;line-height:32px;">Confirm your subscription</h1>
+              <p style="margin:0 0 16px;font-size:16px;line-height:24px;">
+                To start receiving notifications about new releases for <strong>{{ .RepositoryFullName }}</strong>, please confirm your subscription.
+              </p>
+              <p style="margin:32px 0;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;background:#1f6feb;color:#ffffff;text-decoration:none;border-radius:8px;font-size:16px;">
+                  Confirm subscription
+                </a>
+              </p>
+              <p style="margin:0;font-size:14px;line-height:22px;color:#5b6577;">
+                If the button does not work, open this link:
+                <a href="{{ .ConfirmationURL }}">{{ .ConfirmationURL }}</a>
+              </p>
+              <p style="margin:16px 0 0;font-size:14px;line-height:22px;color:#5b6577;">
+                If you no longer want to receive notifications about this repository, unsubscribe here:
+                <a href="{{ .CancellationURL }}">{{ .CancellationURL }}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

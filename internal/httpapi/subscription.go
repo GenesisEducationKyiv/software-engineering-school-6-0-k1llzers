@@ -1,0 +1,99 @@
+package httpapi
+
+import (
+	"context"
+	"net/http"
+
+	"github-release-notifier/internal/readmodel"
+
+	"github.com/gin-gonic/gin"
+)
+
+type subscriptionService interface {
+	Subscribe(ctx context.Context, email string, repositoryFullName string) error
+	ConfirmSubscription(ctx context.Context, token string) error
+	CancelSubscription(ctx context.Context, token string) error
+	ListSubscriptions(ctx context.Context, email string) ([]readmodel.SubscriptionView, error)
+}
+
+type SubscriptionHandler struct {
+	subscriptions subscriptionService
+}
+
+type createSubscriptionRequest struct {
+	Email              string `json:"email" binding:"required,email"`
+	RepositoryFullName string `json:"repo" binding:"required"`
+}
+
+type listSubscriptionsResponse struct {
+	Email       string `json:"email"`
+	Repo        string `json:"repo"`
+	Confirmed   bool   `json:"confirmed"`
+	LastSeenTag string `json:"last_seen_tag"`
+}
+
+func NewSubscriptionHandler(subscriptions subscriptionService) *SubscriptionHandler {
+	return &SubscriptionHandler{subscriptions: subscriptions}
+}
+
+func (h *SubscriptionHandler) Create(c *gin.Context) {
+	var req createSubscriptionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	err := h.subscriptions.Subscribe(c.Request.Context(), req.Email, req.RepositoryFullName)
+	if err != nil {
+		writeSubscriptionCreateError(c, err)
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func (h *SubscriptionHandler) List(c *gin.Context) {
+	email := c.Query("email")
+	if err := parseRequiredEmail(email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	subscriptions, err := h.subscriptions.ListSubscriptions(c.Request.Context(), email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, toListSubscriptionsResponse(subscriptions))
+}
+
+func (h *SubscriptionHandler) Confirm(c *gin.Context) {
+	token, err := parseToken(c.Param("token"), "invalid confirmation token")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.subscriptions.ConfirmSubscription(c.Request.Context(), token); err != nil {
+		writeSubscriptionConfirmError(c, err)
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+func (h *SubscriptionHandler) Cancel(c *gin.Context) {
+	token, err := parseToken(c.Param("token"), "invalid cancellation token")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.subscriptions.CancelSubscription(c.Request.Context(), token); err != nil {
+		writeSubscriptionCancelError(c, err)
+		return
+	}
+
+	c.Status(http.StatusOK)
+}

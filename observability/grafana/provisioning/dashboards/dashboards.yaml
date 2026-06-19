@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: github-release-notifier
+    orgId: 1
+    folder: GitHub Release Notifier
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

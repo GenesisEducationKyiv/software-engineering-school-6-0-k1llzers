@@ -7,7 +7,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const defaultPath = "config.yaml"
+const (
+	appDefaultPath          = "app-config.yaml"
+	notificationDefaultPath = "notification-config.yaml"
+)
 
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
@@ -33,6 +36,7 @@ type GitHubConfig struct {
 type RabbitMQConfig struct {
 	URL                  string `yaml:"url"`
 	NotificationExchange string `yaml:"notification_exchange"`
+	NotificationQueue    string `yaml:"notification_queue"`
 }
 
 type MailConfig struct {
@@ -63,6 +67,7 @@ func Default() Config {
 		RabbitMQ: RabbitMQConfig{
 			URL:                  "",
 			NotificationExchange: "notifications",
+			NotificationQueue:    "notification-service",
 		},
 		Mail: MailConfig{
 			Port:       587,
@@ -75,10 +80,18 @@ func Default() Config {
 	}
 }
 
+func LoadApp() (Config, error) {
+	return Load(appDefaultPath)
+}
+
+func LoadNotification() (Config, error) {
+	return Load(notificationDefaultPath)
+}
+
 func Load(path string) (Config, error) {
 	cfg := Default()
 	if path == "" {
-		path = defaultPath
+		path = appDefaultPath
 	}
 
 	data, err := os.ReadFile(path)
@@ -111,6 +124,10 @@ func applyDefaults(cfg *Config) {
 
 	if cfg.RabbitMQ.NotificationExchange == "" {
 		cfg.RabbitMQ.NotificationExchange = defaults.RabbitMQ.NotificationExchange
+	}
+
+	if cfg.RabbitMQ.NotificationQueue == "" {
+		cfg.RabbitMQ.NotificationQueue = defaults.RabbitMQ.NotificationQueue
 	}
 
 	if cfg.Mail.Port == 0 {

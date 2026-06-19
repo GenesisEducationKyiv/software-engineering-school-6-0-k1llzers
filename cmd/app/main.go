@@ -7,21 +7,21 @@ import (
 	"log/slog"
 	"os"
 
-	"github-release-notifier/internal/notifications"
-	notificationsrepo "github-release-notifier/internal/notifications/repository"
+	"github-release-notifier/internal/app/notifications"
+	notificationsrepo "github-release-notifier/internal/app/notifications/repository"
+	"github-release-notifier/internal/app/platform/github"
+	"github-release-notifier/internal/app/platform/http/api"
+	"github-release-notifier/internal/app/platform/mail/smtp"
+	integrationoutbox "github-release-notifier/internal/app/platform/messaging/outbox"
+	"github-release-notifier/internal/app/platform/messaging/rabbitmq"
+	"github-release-notifier/internal/app/platform/metrics"
+	"github-release-notifier/internal/app/release_tracking"
+	releasetrackingrepo "github-release-notifier/internal/app/release_tracking/repository"
+	"github-release-notifier/internal/app/subscriptions"
+	subscriptionsrepo "github-release-notifier/internal/app/subscriptions/repository"
 	"github-release-notifier/internal/platform/config"
 	appdb "github-release-notifier/internal/platform/db"
-	"github-release-notifier/internal/platform/github"
-	"github-release-notifier/internal/platform/http/api"
 	"github-release-notifier/internal/platform/logging"
-	"github-release-notifier/internal/platform/mail/smtp"
-	integrationoutbox "github-release-notifier/internal/platform/messaging/outbox"
-	"github-release-notifier/internal/platform/messaging/rabbitmq"
-	"github-release-notifier/internal/platform/metrics"
-	"github-release-notifier/internal/release_tracking"
-	releasetrackingrepo "github-release-notifier/internal/release_tracking/repository"
-	"github-release-notifier/internal/subscriptions"
-	subscriptionsrepo "github-release-notifier/internal/subscriptions/repository"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +30,7 @@ func main() {
 	bootstrapLogger, _ := logging.New(config.Default().Logging.Level, config.Default().Logging.Format)
 	slog.SetDefault(bootstrapLogger)
 
-	cfg, err := config.Load("")
+	cfg, err := config.LoadApp()
 	if err != nil {
 		slog.Error("load config", "error", err)
 		os.Exit(1)
@@ -99,7 +99,7 @@ func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	if err := appdb.RunMigrations(ctx, pg, "migrations"); err != nil {
+	if err := appdb.RunMigrations(ctx, pg, "migrations/app"); err != nil {
 		_ = pg.Close()
 		return nil, err
 	}

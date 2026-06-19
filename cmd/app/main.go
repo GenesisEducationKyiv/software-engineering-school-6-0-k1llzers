@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 
@@ -12,6 +13,8 @@ import (
 	"github-release-notifier/internal/mail"
 	"github-release-notifier/internal/service"
 	"github-release-notifier/internal/storage"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -20,9 +23,10 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	pg, err := db.OpenPostgres(context.Background(), cfg.Database.URL)
+	appCtx := context.Background()
+	pg, err := openDatabase(appCtx, cfg.Database.URL)
 	if err != nil {
-		log.Fatalf("open postgres: %v", err)
+		log.Fatalf("initialize database: %v", err)
 	}
 	defer func() {
 		if err := pg.Close(); err != nil {
@@ -30,12 +34,44 @@ func main() {
 		}
 	}()
 
-	if err := db.RunMigrations(context.Background(), pg, "migrations"); err != nil {
-		log.Fatalf("run migrations: %v", err)
+	app, err := buildApplication(pg, cfg)
+	if err != nil {
+		log.Fatalf("build application: %v", err)
+	}
+
+	startBackgroundWorkers(appCtx, app.outboxDispatcher, app.releaseMonitor)
+
+	if err := app.router.Run(":" + cfg.Server.Port); err != nil {
+		log.Fatalf("run http server: %v", err)
+	}
+}
+
+type application struct {
+	router           *gin.Engine
+	outboxDispatcher *mail.OutboxDispatcher
+	releaseMonitor   *service.ReleaseMonitor
+}
+
+func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
+	pg, err := db.OpenPostgres(ctx, datasourceURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.RunMigrations(ctx, pg, "migrations"); err != nil {
+		_ = pg.Close()
+		return nil, err
+	}
+
+	return pg, nil
+}
+
+func buildApplication(pg *sql.DB, cfg config.Config) (*application, error) {
+	if err := validateMailConfig(cfg.Mail); err != nil {
+		return nil, err
 	}
 
 	transactionManager := db.NewTransactionManager(pg)
-	appCtx := context.Background()
 	userStore := storage.NewUserStore(pg)
 	trackedRepositoryStore := storage.NewTrackedRepositoryStore(pg)
 	subscriptionStore := storage.NewSubscriptionStore(pg)
@@ -43,17 +79,11 @@ func main() {
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
 	templateRenderer, err := mail.NewTemplateRenderer()
 	if err != nil {
-		log.Fatalf("create mail template renderer: %v", err)
-	}
-
-	if err := validateMailConfig(cfg.Mail); err != nil {
-		log.Fatalf("invalid mail config: %v", err)
+		return nil, err
 	}
 
 	sender := newMailSender(cfg.Mail)
 	mailService := mail.NewService(templateRenderer, outboxStore, cfg.Mail.ApiBaseUrl)
-	outboxDispatcher := mail.NewOutboxDispatcher(outboxStore, sender)
-
 	subscriptionService := service.NewSubscriptionService(
 		transactionManager,
 		userStore,
@@ -62,21 +92,27 @@ func main() {
 		githubClient,
 		mailService,
 	)
-	releaseMonitor := service.NewReleaseMonitor(
-		transactionManager,
-		trackedRepositoryStore,
-		subscriptionStore,
-		githubClient,
-		mailService,
-	)
 
-	router := httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService))
+	return &application{
+		router:           httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService)),
+		outboxDispatcher: mail.NewOutboxDispatcher(outboxStore, sender),
+		releaseMonitor: service.NewReleaseMonitor(
+			transactionManager,
+			trackedRepositoryStore,
+			subscriptionStore,
+			githubClient,
+			mailService,
+		),
+	}, nil
+}
 
-	go outboxDispatcher.Run(appCtx)
-	go releaseMonitor.Run(appCtx)
+type BackgroundWorker interface {
+	Run(context.Context)
+}
 
-	if err := router.Run(":" + cfg.Server.Port); err != nil {
-		log.Fatalf("run http server: %v", err)
+func startBackgroundWorkers(ctx context.Context, workers ...BackgroundWorker) {
+	for _, worker := range workers {
+		go worker.Run(ctx)
 	}
 }
 

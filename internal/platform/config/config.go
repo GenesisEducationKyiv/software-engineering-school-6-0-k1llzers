@@ -1,7 +1,7 @@
 package config
 
 import (
-	"errors"
+	"fmt"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -10,6 +10,7 @@ import (
 const (
 	appDefaultPath          = "app-config.yaml"
 	notificationDefaultPath = "notification-config.yaml"
+	quotaDefaultPath        = "quota-config.yaml"
 )
 
 type Config struct {
@@ -18,6 +19,7 @@ type Config struct {
 	GitHub   GitHubConfig   `yaml:"github"`
 	RabbitMQ RabbitMQConfig `yaml:"rabbitmq"`
 	Mail     MailConfig     `yaml:"mail"`
+	Quota    QuotaConfig    `yaml:"quota"`
 	Logging  LoggingConfig  `yaml:"logging"`
 }
 
@@ -48,36 +50,14 @@ type MailConfig struct {
 	ApiBaseUrl string `yaml:"api_base_url"`
 }
 
+type QuotaConfig struct {
+	GRPCPort                 string `yaml:"grpc_port"`
+	DefaultSubscriptionLimit int    `yaml:"default_subscription_limit"`
+}
+
 type LoggingConfig struct {
 	Level  string `yaml:"level"`
 	Format string `yaml:"format"`
-}
-
-func Default() Config {
-	return Config{
-		Server: ServerConfig{
-			Port: "8080",
-		},
-		Database: DatabaseConfig{
-			URL: "postgres://postgres:postgres@localhost:5432/github_release_notifier?sslmode=disable",
-		},
-		GitHub: GitHubConfig{
-			Token: "",
-		},
-		RabbitMQ: RabbitMQConfig{
-			URL:                  "",
-			NotificationExchange: "notifications",
-			NotificationQueue:    "notification-service",
-		},
-		Mail: MailConfig{
-			Port:       587,
-			ApiBaseUrl: "http://localhost:8080/api",
-		},
-		Logging: LoggingConfig{
-			Level:  "info",
-			Format: "json",
-		},
-	}
 }
 
 func LoadApp() (Config, error) {
@@ -88,61 +68,24 @@ func LoadNotification() (Config, error) {
 	return Load(notificationDefaultPath)
 }
 
+func LoadQuota() (Config, error) {
+	return Load(quotaDefaultPath)
+}
+
 func Load(path string) (Config, error) {
-	cfg := Default()
 	if path == "" {
-		path = appDefaultPath
+		return Config{}, fmt.Errorf("config path is required")
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return cfg, nil
-		}
-
 		return Config{}, err
 	}
 
+	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, err
 	}
 
-	applyDefaults(&cfg)
 	return cfg, nil
-}
-
-func applyDefaults(cfg *Config) {
-	defaults := Default()
-
-	if cfg.Server.Port == "" {
-		cfg.Server.Port = defaults.Server.Port
-	}
-
-	if cfg.Database.URL == "" {
-		cfg.Database.URL = defaults.Database.URL
-	}
-
-	if cfg.RabbitMQ.NotificationExchange == "" {
-		cfg.RabbitMQ.NotificationExchange = defaults.RabbitMQ.NotificationExchange
-	}
-
-	if cfg.RabbitMQ.NotificationQueue == "" {
-		cfg.RabbitMQ.NotificationQueue = defaults.RabbitMQ.NotificationQueue
-	}
-
-	if cfg.Mail.Port == 0 {
-		cfg.Mail.Port = defaults.Mail.Port
-	}
-
-	if cfg.Mail.ApiBaseUrl == "" {
-		cfg.Mail.ApiBaseUrl = defaults.Mail.ApiBaseUrl
-	}
-
-	if cfg.Logging.Level == "" {
-		cfg.Logging.Level = defaults.Logging.Level
-	}
-
-	if cfg.Logging.Format == "" {
-		cfg.Logging.Format = defaults.Logging.Format
-	}
 }

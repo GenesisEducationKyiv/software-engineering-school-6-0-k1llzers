@@ -72,8 +72,17 @@ func TestValidateConfig_AcceptsValidConfig(t *testing.T) {
 }
 
 func validAppConfig() config.Config {
-	cfg := config.Default()
-	cfg.Database.URL = "postgres://user:pass@localhost:5432/db?sslmode=disable"
-	cfg.RabbitMQ.URL = "amqp://guest:guest@localhost:5672/"
-	return cfg
+	return config.Config{
+		Server: config.ServerConfig{
+			Port: "8080",
+		},
+		Database: config.DatabaseConfig{
+			URL: "postgres://user:pass@localhost:5432/db?sslmode=disable",
+		},
+		RabbitMQ: config.RabbitMQConfig{
+			URL:                  "amqp://guest:guest@localhost:5672/",
+			NotificationExchange: "notifications",
+			NotificationQueue:    "notification-service",
+		},
+	}
 }

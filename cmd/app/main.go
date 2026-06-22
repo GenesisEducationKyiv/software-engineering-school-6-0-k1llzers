@@ -25,7 +25,7 @@ import (
 )
 
 func main() {
-	bootstrapLogger, _ := logging.New(config.Default().Logging.Level, config.Default().Logging.Format)
+	bootstrapLogger, _ := logging.New("", "")
 	slog.SetDefault(bootstrapLogger)
 
 	cfg, err := config.LoadApp()

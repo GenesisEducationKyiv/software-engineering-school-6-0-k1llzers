@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: quota/quota.proto
+// source: proto/quota/quota.proto
 
 package quota
 
@@ -32,7 +32,7 @@ type ReserveSubscriptionSlotRequest struct {
 
 func (x *ReserveSubscriptionSlotRequest) Reset() {
 	*x = ReserveSubscriptionSlotRequest{}
-	mi := &file_quota_quota_proto_msgTypes[0]
+	mi := &file_proto_quota_quota_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +44,7 @@ func (x *ReserveSubscriptionSlotRequest) String() string {
 func (*ReserveSubscriptionSlotRequest) ProtoMessage() {}
 
 func (x *ReserveSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quota_quota_proto_msgTypes[0]
+	mi := &file_proto_quota_quota_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +57,7 @@ func (x *ReserveSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReserveSubscriptionSlotRequest.ProtoReflect.Descriptor instead.
 func (*ReserveSubscriptionSlotRequest) Descriptor() ([]byte, []int) {
-	return file_quota_quota_proto_rawDescGZIP(), []int{0}
+	return file_proto_quota_quota_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ReserveSubscriptionSlotRequest) GetSagaId() string {
@@ -91,7 +91,7 @@ type ReserveSubscriptionSlotResponse struct {
 
 func (x *ReserveSubscriptionSlotResponse) Reset() {
 	*x = ReserveSubscriptionSlotResponse{}
-	mi := &file_quota_quota_proto_msgTypes[1]
+	mi := &file_proto_quota_quota_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +103,7 @@ func (x *ReserveSubscriptionSlotResponse) String() string {
 func (*ReserveSubscriptionSlotResponse) ProtoMessage() {}
 
 func (x *ReserveSubscriptionSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quota_quota_proto_msgTypes[1]
+	mi := &file_proto_quota_quota_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +116,7 @@ func (x *ReserveSubscriptionSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReserveSubscriptionSlotResponse.ProtoReflect.Descriptor instead.
 func (*ReserveSubscriptionSlotResponse) Descriptor() ([]byte, []int) {
-	return file_quota_quota_proto_rawDescGZIP(), []int{1}
+	return file_proto_quota_quota_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ReserveSubscriptionSlotResponse) GetReserved() bool {
@@ -135,14 +135,15 @@ func (x *ReserveSubscriptionSlotResponse) GetRejectionReason() string {
 
 type CommitSubscriptionSlotRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId int64                  `protobuf:"varint,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
+	SagaId         string                 `protobuf:"bytes,1,opt,name=saga_id,json=sagaId,proto3" json:"saga_id,omitempty"`
+	SubscriptionId int64                  `protobuf:"varint,2,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CommitSubscriptionSlotRequest) Reset() {
 	*x = CommitSubscriptionSlotRequest{}
-	mi := &file_quota_quota_proto_msgTypes[2]
+	mi := &file_proto_quota_quota_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +155,7 @@ func (x *CommitSubscriptionSlotRequest) String() string {
 func (*CommitSubscriptionSlotRequest) ProtoMessage() {}
 
 func (x *CommitSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quota_quota_proto_msgTypes[2]
+	mi := &file_proto_quota_quota_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +168,14 @@ func (x *CommitSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitSubscriptionSlotRequest.ProtoReflect.Descriptor instead.
 func (*CommitSubscriptionSlotRequest) Descriptor() ([]byte, []int) {
-	return file_quota_quota_proto_rawDescGZIP(), []int{2}
+	return file_proto_quota_quota_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CommitSubscriptionSlotRequest) GetSagaId() string {
+	if x != nil {
+		return x.SagaId
+	}
+	return ""
 }
 
 func (x *CommitSubscriptionSlotRequest) GetSubscriptionId() int64 {
@@ -185,7 +193,7 @@ type CommitSubscriptionSlotResponse struct {
 
 func (x *CommitSubscriptionSlotResponse) Reset() {
 	*x = CommitSubscriptionSlotResponse{}
-	mi := &file_quota_quota_proto_msgTypes[3]
+	mi := &file_proto_quota_quota_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -197,7 +205,7 @@ func (x *CommitSubscriptionSlotResponse) String() string {
 func (*CommitSubscriptionSlotResponse) ProtoMessage() {}
 
 func (x *CommitSubscriptionSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quota_quota_proto_msgTypes[3]
+	mi := &file_proto_quota_quota_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -210,19 +218,20 @@ func (x *CommitSubscriptionSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitSubscriptionSlotResponse.ProtoReflect.Descriptor instead.
 func (*CommitSubscriptionSlotResponse) Descriptor() ([]byte, []int) {
-	return file_quota_quota_proto_rawDescGZIP(), []int{3}
+	return file_proto_quota_quota_proto_rawDescGZIP(), []int{3}
 }
 
 type ReleaseSubscriptionSlotRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId int64                  `protobuf:"varint,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
+	SagaId         string                 `protobuf:"bytes,1,opt,name=saga_id,json=sagaId,proto3" json:"saga_id,omitempty"`
+	SubscriptionId int64                  `protobuf:"varint,2,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ReleaseSubscriptionSlotRequest) Reset() {
 	*x = ReleaseSubscriptionSlotRequest{}
-	mi := &file_quota_quota_proto_msgTypes[4]
+	mi := &file_proto_quota_quota_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +243,7 @@ func (x *ReleaseSubscriptionSlotRequest) String() string {
 func (*ReleaseSubscriptionSlotRequest) ProtoMessage() {}
 
 func (x *ReleaseSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quota_quota_proto_msgTypes[4]
+	mi := &file_proto_quota_quota_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,7 +256,14 @@ func (x *ReleaseSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseSubscriptionSlotRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseSubscriptionSlotRequest) Descriptor() ([]byte, []int) {
-	return file_quota_quota_proto_rawDescGZIP(), []int{4}
+	return file_proto_quota_quota_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ReleaseSubscriptionSlotRequest) GetSagaId() string {
+	if x != nil {
+		return x.SagaId
+	}
+	return ""
 }
 
 func (x *ReleaseSubscriptionSlotRequest) GetSubscriptionId() int64 {
@@ -265,7 +281,7 @@ type ReleaseSubscriptionSlotResponse struct {
 
 func (x *ReleaseSubscriptionSlotResponse) Reset() {
 	*x = ReleaseSubscriptionSlotResponse{}
-	mi := &file_quota_quota_proto_msgTypes[5]
+	mi := &file_proto_quota_quota_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -277,7 +293,7 @@ func (x *ReleaseSubscriptionSlotResponse) String() string {
 func (*ReleaseSubscriptionSlotResponse) ProtoMessage() {}
 
 func (x *ReleaseSubscriptionSlotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quota_quota_proto_msgTypes[5]
+	mi := &file_proto_quota_quota_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,26 +306,28 @@ func (x *ReleaseSubscriptionSlotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseSubscriptionSlotResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseSubscriptionSlotResponse) Descriptor() ([]byte, []int) {
-	return file_quota_quota_proto_rawDescGZIP(), []int{5}
+	return file_proto_quota_quota_proto_rawDescGZIP(), []int{5}
 }
 
-var File_quota_quota_proto protoreflect.FileDescriptor
+var File_proto_quota_quota_proto protoreflect.FileDescriptor
 
-const file_quota_quota_proto_rawDesc = "" +
+const file_proto_quota_quota_proto_rawDesc = "" +
 	"\n" +
-	"\x11quota/quota.proto\x12\x05quota\"x\n" +
+	"\x17proto/quota/quota.proto\x12\x05quota\"x\n" +
 	"\x1eReserveSubscriptionSlotRequest\x12\x17\n" +
 	"\asaga_id\x18\x01 \x01(\tR\x06sagaId\x12'\n" +
 	"\x0fsubscription_id\x18\x02 \x01(\x03R\x0esubscriptionId\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\"h\n" +
 	"\x1fReserveSubscriptionSlotResponse\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\bR\breserved\x12)\n" +
-	"\x10rejection_reason\x18\x02 \x01(\tR\x0frejectionReason\"H\n" +
-	"\x1dCommitSubscriptionSlotRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\x03R\x0esubscriptionId\" \n" +
-	"\x1eCommitSubscriptionSlotResponse\"I\n" +
-	"\x1eReleaseSubscriptionSlotRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\x03R\x0esubscriptionId\"!\n" +
+	"\x10rejection_reason\x18\x02 \x01(\tR\x0frejectionReason\"a\n" +
+	"\x1dCommitSubscriptionSlotRequest\x12\x17\n" +
+	"\asaga_id\x18\x01 \x01(\tR\x06sagaId\x12'\n" +
+	"\x0fsubscription_id\x18\x02 \x01(\x03R\x0esubscriptionId\" \n" +
+	"\x1eCommitSubscriptionSlotResponse\"b\n" +
+	"\x1eReleaseSubscriptionSlotRequest\x12\x17\n" +
+	"\asaga_id\x18\x01 \x01(\tR\x06sagaId\x12'\n" +
+	"\x0fsubscription_id\x18\x02 \x01(\x03R\x0esubscriptionId\"!\n" +
 	"\x1fReleaseSubscriptionSlotResponse2\xc9\x02\n" +
 	"\fQuotaService\x12h\n" +
 	"\x17ReserveSubscriptionSlot\x12%.quota.ReserveSubscriptionSlotRequest\x1a&.quota.ReserveSubscriptionSlotResponse\x12e\n" +
@@ -317,19 +335,19 @@ const file_quota_quota_proto_rawDesc = "" +
 	"\x17ReleaseSubscriptionSlot\x12%.quota.ReleaseSubscriptionSlotRequest\x1a&.quota.ReleaseSubscriptionSlotResponseB3Z1github-release-notifier/pkg/contracts/quota;quotab\x06proto3"
 
 var (
-	file_quota_quota_proto_rawDescOnce sync.Once
-	file_quota_quota_proto_rawDescData []byte
+	file_proto_quota_quota_proto_rawDescOnce sync.Once
+	file_proto_quota_quota_proto_rawDescData []byte
 )
 
-func file_quota_quota_proto_rawDescGZIP() []byte {
-	file_quota_quota_proto_rawDescOnce.Do(func() {
-		file_quota_quota_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_quota_quota_proto_rawDesc), len(file_quota_quota_proto_rawDesc)))
+func file_proto_quota_quota_proto_rawDescGZIP() []byte {
+	file_proto_quota_quota_proto_rawDescOnce.Do(func() {
+		file_proto_quota_quota_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_quota_quota_proto_rawDesc), len(file_proto_quota_quota_proto_rawDesc)))
 	})
-	return file_quota_quota_proto_rawDescData
+	return file_proto_quota_quota_proto_rawDescData
 }
 
-var file_quota_quota_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_quota_quota_proto_goTypes = []any{
+var file_proto_quota_quota_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_quota_quota_proto_goTypes = []any{
 	(*ReserveSubscriptionSlotRequest)(nil),  // 0: quota.ReserveSubscriptionSlotRequest
 	(*ReserveSubscriptionSlotResponse)(nil), // 1: quota.ReserveSubscriptionSlotResponse
 	(*CommitSubscriptionSlotRequest)(nil),   // 2: quota.CommitSubscriptionSlotRequest
@@ -337,7 +355,7 @@ var file_quota_quota_proto_goTypes = []any{
 	(*ReleaseSubscriptionSlotRequest)(nil),  // 4: quota.ReleaseSubscriptionSlotRequest
 	(*ReleaseSubscriptionSlotResponse)(nil), // 5: quota.ReleaseSubscriptionSlotResponse
 }
-var file_quota_quota_proto_depIdxs = []int32{
+var file_proto_quota_quota_proto_depIdxs = []int32{
 	0, // 0: quota.QuotaService.ReserveSubscriptionSlot:input_type -> quota.ReserveSubscriptionSlotRequest
 	2, // 1: quota.QuotaService.CommitSubscriptionSlot:input_type -> quota.CommitSubscriptionSlotRequest
 	4, // 2: quota.QuotaService.ReleaseSubscriptionSlot:input_type -> quota.ReleaseSubscriptionSlotRequest
@@ -351,26 +369,26 @@ var file_quota_quota_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_quota_quota_proto_init() }
-func file_quota_quota_proto_init() {
-	if File_quota_quota_proto != nil {
+func init() { file_proto_quota_quota_proto_init() }
+func file_proto_quota_quota_proto_init() {
+	if File_proto_quota_quota_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_quota_quota_proto_rawDesc), len(file_quota_quota_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_quota_quota_proto_rawDesc), len(file_proto_quota_quota_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_quota_quota_proto_goTypes,
-		DependencyIndexes: file_quota_quota_proto_depIdxs,
-		MessageInfos:      file_quota_quota_proto_msgTypes,
+		GoTypes:           file_proto_quota_quota_proto_goTypes,
+		DependencyIndexes: file_proto_quota_quota_proto_depIdxs,
+		MessageInfos:      file_proto_quota_quota_proto_msgTypes,
 	}.Build()
-	File_quota_quota_proto = out.File
-	file_quota_quota_proto_goTypes = nil
-	file_quota_quota_proto_depIdxs = nil
+	File_proto_quota_quota_proto = out.File
+	file_proto_quota_quota_proto_goTypes = nil
+	file_proto_quota_quota_proto_depIdxs = nil
 }

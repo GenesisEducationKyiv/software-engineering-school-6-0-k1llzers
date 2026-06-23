@@ -13,6 +13,7 @@ import (
 	integrationoutbox "github-release-notifier/internal/app/platform/messaging/outbox"
 	"github-release-notifier/internal/app/platform/messaging/rabbitmq"
 	"github-release-notifier/internal/app/platform/metrics"
+	appquota "github-release-notifier/internal/app/platform/quota"
 	"github-release-notifier/internal/app/release_tracking"
 	releasetrackingrepo "github-release-notifier/internal/app/release_tracking/repository"
 	"github-release-notifier/internal/app/subscriptions"
@@ -22,6 +23,8 @@ import (
 	"github-release-notifier/internal/platform/logging"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -76,8 +79,9 @@ func main() {
 		logger.Error("build application", "error", err)
 		os.Exit(1)
 	}
+	defer app.Close()
 
-	workers := []BackgroundWorker{app.releaseMonitor}
+	workers := []BackgroundWorker{app.releaseMonitor, app.subscriptionSagaRetryWorker}
 	if app.integrationOutboxPublisher != nil {
 		workers = append(workers, app.integrationOutboxPublisher)
 	}
@@ -90,9 +94,19 @@ func main() {
 }
 
 type application struct {
-	router                     *gin.Engine
-	integrationOutboxPublisher *integrationoutbox.PublisherWorker
-	releaseMonitor             *releasetracking.ReleaseMonitor
+	router                      *gin.Engine
+	integrationOutboxPublisher  *integrationoutbox.PublisherWorker
+	releaseMonitor              *releasetracking.ReleaseMonitor
+	subscriptionSagaRetryWorker *subscriptions.SagaRetryWorker
+	quotaConn                   *grpc.ClientConn
+}
+
+func (a *application) Close() {
+	if a.quotaConn != nil {
+		if err := a.quotaConn.Close(); err != nil {
+			slog.Warn("close quota grpc connection failed", "error", err)
+		}
+	}
 }
 
 func openDatabase(ctx context.Context, datasourceURL string) (*sql.DB, error) {
@@ -114,23 +128,41 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	userStore := subscriptionsrepo.NewUserStore(pg)
 	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(pg)
 	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(pg)
+	subscriptionSagaStore := subscriptionsrepo.NewSagaStore(pg)
 	confirmedSubscriptionStore := releasetrackingrepo.NewConfirmedSubscriptionStore(pg)
 	integrationOutboxStore := integrationoutbox.NewStore(pg)
 	githubClient := github.NewClient(nil, cfg.GitHub.Token)
 	integrationPublisher := newIntegrationOutboxPublisher(cfg.RabbitMQ, integrationOutboxStore)
 	notificationService := notifications.NewService(integrationOutboxStore)
+
+	quotaConn, err := grpc.Dial(cfg.Quota.GRPCAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	quotaClient := appquota.NewClient(quotaConn)
+	subscriptionSagaOrchestrator := subscriptions.NewSagaOrchestrator(
+		transactionManager,
+		subscriptionSagaStore,
+		subscriptionStore,
+		quotaClient,
+		notificationService,
+	)
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
 		trackedRepositoryStore,
 		subscriptionStore,
+		subscriptionStore,
+		subscriptionSagaStore,
+		subscriptionSagaOrchestrator,
 		githubClient,
-		notificationService,
 	)
 
 	return &application{
-		router:                     httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
-		integrationOutboxPublisher: integrationPublisher,
+		router:                      httpapi.NewRouter(httpapi.NewSubscriptionHandler(subscriptionService), appMetrics),
+		integrationOutboxPublisher:  integrationPublisher,
+		subscriptionSagaRetryWorker: subscriptions.NewSagaRetryWorker(subscriptionSagaOrchestrator),
+		quotaConn:                   quotaConn,
 		releaseMonitor: releasetracking.NewReleaseMonitor(
 			transactionManager,
 			trackedRepositoryStore,
@@ -171,6 +203,8 @@ func validateConfig(cfg config.Config) error {
 		return errors.New("rabbitmq.notification_exchange is required")
 	case cfg.RabbitMQ.NotificationQueue == "":
 		return errors.New("rabbitmq.notification_queue is required")
+	case cfg.Quota.GRPCAddress == "":
+		return errors.New("quota.grpc_address is required")
 	default:
 		return nil
 	}

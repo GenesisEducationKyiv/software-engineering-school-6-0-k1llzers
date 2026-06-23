@@ -45,6 +45,20 @@ type githubClientFake struct {
 	latestReleaseCalls    int
 }
 
+type subscriptionQuotaClientFake struct{}
+
+func (f *subscriptionQuotaClientFake) ReserveSubscriptionSlot(context.Context, uuid.UUID, int64, string) (subscriptions.QuotaReserveResult, error) {
+	return subscriptions.QuotaReserveResult{Reserved: true}, nil
+}
+
+func (f *subscriptionQuotaClientFake) CommitSubscriptionSlot(context.Context, uuid.UUID, int64) error {
+	return nil
+}
+
+func (f *subscriptionQuotaClientFake) ReleaseSubscriptionSlot(context.Context, uuid.UUID, int64) error {
+	return nil
+}
+
 func (f *githubClientFake) RepositoryExists(_ context.Context, _ string, _ string) error {
 	f.repositoryExistsCalls++
 	return f.existsErr
@@ -87,15 +101,25 @@ func setupSubscriptionAPIIntegrationTest(t *testing.T) subscriptionAPIFixture {
 	userStore := subscriptionsrepo.NewUserStore(db)
 	trackedRepositoryStore := releasetrackingrepo.NewTrackedRepositoryStore(db)
 	subscriptionStore := subscriptionsrepo.NewSubscriptionStore(db)
+	subscriptionSagaStore := subscriptionsrepo.NewSagaStore(db)
 	outboxStore := integrationoutbox.NewStore(db)
 	notificationService := notifications.NewService(outboxStore)
+	subscriptionSagaOrchestrator := subscriptions.NewSagaOrchestrator(
+		transactionManager,
+		subscriptionSagaStore,
+		subscriptionStore,
+		&subscriptionQuotaClientFake{},
+		notificationService,
+	)
 	subscriptionService := subscriptions.NewService(
 		transactionManager,
 		userStore,
 		trackedRepositoryStore,
 		subscriptionStore,
+		subscriptionStore,
+		subscriptionSagaStore,
+		subscriptionSagaOrchestrator,
 		githubClient,
-		notificationService,
 	)
 
 	return subscriptionAPIFixture{
@@ -234,14 +258,7 @@ func TestSubscriptionAPI_ListReturnsSubscriptions(t *testing.T) {
 
 	listBeforeConfirm := fixture.get(t, subscriptionListURL(data.Email))
 	require.Equal(t, http.StatusOK, listBeforeConfirm.Code)
-	requireSubscriptionsListResponse(t, listBeforeConfirm, []listSubscriptionsResponse{
-		{
-			Email:       data.Email,
-			Repo:        data.Repo,
-			Confirmed:   false,
-			LastSeenTag: "",
-		},
-	})
+	requireSubscriptionsListResponse(t, listBeforeConfirm, nil)
 }
 
 func TestSubscriptionAPI_ListReturnsEmptyArrayWhenEmailHasNoSubscriptions(t *testing.T) {
@@ -307,7 +324,7 @@ func TestSubscriptionAPI_ConfirmUnknownToken(t *testing.T) {
 	require.JSONEq(t, `{"error":"resource not found"}`, response.Body.String())
 }
 
-func TestSubscriptionAPI_UnsubscribeDeletesSubscription(t *testing.T) {
+func TestSubscriptionAPI_UnsubscribeCancelsSubscription(t *testing.T) {
 	fixture := setupSubscriptionAPIIntegrationTest(t)
 	data := newSubscriptionTestData()
 	tokens := createSubscription(t, fixture, data.Email, data.Repo)
@@ -315,6 +332,7 @@ func TestSubscriptionAPI_UnsubscribeDeletesSubscription(t *testing.T) {
 	unsubscribeResponse := fixture.get(t, "/api/unsubscribe/"+tokens.CancellationToken)
 	require.Equal(t, http.StatusOK, unsubscribeResponse.Code)
 	requireSubscriptionRowCount(t, fixture.db, data.Email, data.Owner, data.Name, 0)
+	requireSubscriptionMissingByCancellationToken(t, fixture.db, tokens.CancellationToken)
 	requireIntegrationOutboxMessageCount(t, fixture.db, data.Email, string(notificationcontracts.TypeSubscriptionConfirmationRequested), 1)
 
 	listAfterUnsubscribe := fixture.get(t, subscriptionListURL(data.Email))
@@ -421,6 +439,19 @@ func requireSubscriptionRowCount(t *testing.T, db *sql.DB, email string, owner s
 	require.Equal(t, expectedCount, actualCount, "unexpected subscription row count for %s -> %s/%s", email, owner, name)
 }
 
+func requireSubscriptionMissingByCancellationToken(t *testing.T, db *sql.DB, cancellationToken string) {
+	t.Helper()
+
+	var count int
+	err := db.QueryRowContext(
+		context.Background(),
+		`select count(*) from subscriptions where cancellation_token = $1`,
+		cancellationToken,
+	).Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 func requireIntegrationOutboxMessageCount(t *testing.T, db *sql.DB, recipientEmail string, messageType string, expectedCount int) {
 	t.Helper()
 
@@ -512,13 +543,21 @@ func requireSubscriptionConfirmed(t *testing.T, db *sql.DB, confirmationToken st
 	t.Helper()
 
 	var confirmed bool
+	var status subscriptions.SagaStatus
 	err := db.QueryRowContext(
 		context.Background(),
-		`select confirmed from subscriptions where confirmation_token = $1`,
+		`
+			select s.confirmed, ss.status
+			from subscriptions s
+			join subscription_sagas ss on ss.subscription_id = s.id
+				and ss.operation = 'subscribe'
+			where s.confirmation_token = $1
+		`,
 		confirmationToken,
-	).Scan(&confirmed)
+	).Scan(&confirmed, &status)
 	require.NoError(t, err)
 	require.True(t, confirmed)
+	require.Equal(t, subscriptions.SagaStatusCompleted, status)
 }
 
 func newIntegrationTestMetrics(t *testing.T) *appmetrics.Metrics {

@@ -22,13 +22,15 @@ message ReserveSubscriptionSlotResponse {
 }
 
 message CommitSubscriptionSlotRequest {
-  int64 subscription_id = 1;
+  string saga_id = 1;
+  int64 subscription_id = 2;
 }
 
 message CommitSubscriptionSlotResponse {}
 
 message ReleaseSubscriptionSlotRequest {
-  int64 subscription_id = 1;
+  string saga_id = 1;
+  int64 subscription_id = 2;
 }
 
 message ReleaseSubscriptionSlotResponse {}

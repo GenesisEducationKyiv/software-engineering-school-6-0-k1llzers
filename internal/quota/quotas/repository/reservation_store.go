@@ -31,7 +31,7 @@ func (s *ReservationStore) ReserveSlot(ctx context.Context, sagaID uuid.UUID, su
 		return quotas.ReserveResult{}, err
 	}
 
-	if result, found, err := s.reuseExistingReservation(ctx, tx, subscriptionID); found || err != nil {
+	if result, found, err := s.reuseExistingReservation(ctx, tx, sagaID, subscriptionID); found || err != nil {
 		return result, commitIfNoError(tx, err)
 	}
 
@@ -39,10 +39,14 @@ func (s *ReservationStore) ReserveSlot(ctx context.Context, sagaID uuid.UUID, su
 	return result, commitIfNoError(tx, err)
 }
 
-func (s *ReservationStore) reuseExistingReservation(ctx context.Context, tx *sql.Tx, subscriptionID int64) (quotas.ReserveResult, bool, error) {
-	existingStatus, found, err := s.findReservationStatus(ctx, tx, subscriptionID)
+func (s *ReservationStore) reuseExistingReservation(ctx context.Context, tx *sql.Tx, sagaID uuid.UUID, subscriptionID int64) (quotas.ReserveResult, bool, error) {
+	existingSagaID, existingStatus, found, err := s.findReservation(ctx, tx, subscriptionID)
 	if err != nil || !found {
 		return quotas.ReserveResult{}, found, err
+	}
+
+	if existingSagaID != sagaID {
+		return quotas.ReserveResult{}, true, quotas.ErrReservationSagaMismatch
 	}
 
 	return reserveResultForExistingStatus(existingStatus), true, nil
@@ -90,7 +94,7 @@ func (s *ReservationStore) reserveSlot(ctx context.Context, tx *sql.Tx, sagaID u
 	return quotas.ReserveResult{Reserved: true}, nil
 }
 
-func (s *ReservationStore) CommitSlot(ctx context.Context, subscriptionID int64) error {
+func (s *ReservationStore) CommitSlot(ctx context.Context, sagaID uuid.UUID, subscriptionID int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -102,8 +106,9 @@ func (s *ReservationStore) CommitSlot(ctx context.Context, subscriptionID int64)
 	var status quotas.ReservationStatus
 	err = tx.QueryRowContext(
 		ctx,
-		`select status from quota_reservations where subscription_id = $1 for update`,
+		`select status from quota_reservations where subscription_id = $1 and reservation_saga_id = $2 for update`,
 		subscriptionID,
+		sagaID,
 	).Scan(&status)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -123,9 +128,11 @@ func (s *ReservationStore) CommitSlot(ctx context.Context, subscriptionID int64)
 				update quota_reservations
 				set status = 'committed',
 					updated_at = now()
-				where subscription_id = $1;
+				where subscription_id = $1
+				  and reservation_saga_id = $2;
 			`,
 			subscriptionID,
+			sagaID,
 		)
 		if err != nil {
 			return err
@@ -137,24 +144,21 @@ func (s *ReservationStore) CommitSlot(ctx context.Context, subscriptionID int64)
 	}
 }
 
-func (s *ReservationStore) ReleaseSlot(ctx context.Context, subscriptionID int64) error {
+func (s *ReservationStore) ReleaseSlot(ctx context.Context, sagaID uuid.UUID, subscriptionID int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
+	defer rollbackUnlessCommitted(tx)
 
 	var email string
 	var status quotas.ReservationStatus
+	var releaseSagaID sql.NullString
 	err = tx.QueryRowContext(
 		ctx,
-		`select email, status from quota_reservations where subscription_id = $1 for update`,
+		`select email, status, release_saga_id::text from quota_reservations where subscription_id = $1 for update`,
 		subscriptionID,
-	).Scan(&email, &status)
+	).Scan(&email, &status, &releaseSagaID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			err = tx.Commit()
@@ -164,7 +168,16 @@ func (s *ReservationStore) ReleaseSlot(ctx context.Context, subscriptionID int64
 		return err
 	}
 
-	if status == quotas.ReservationStatusReleased || status == quotas.ReservationStatusRejected {
+	if status == quotas.ReservationStatusReleased {
+		if releaseSagaID.Valid && releaseSagaID.String != sagaID.String() {
+			return quotas.ErrReservationSagaMismatch
+		}
+
+		err = tx.Commit()
+		return err
+	}
+
+	if status == quotas.ReservationStatusRejected {
 		err = tx.Commit()
 		return err
 	}
@@ -174,10 +187,12 @@ func (s *ReservationStore) ReleaseSlot(ctx context.Context, subscriptionID int64
 		`
 			update quota_reservations
 			set status = 'released',
+				release_saga_id = $2,
 				updated_at = now()
 			where subscription_id = $1;
 		`,
 		subscriptionID,
+		sagaID,
 	)
 	if err != nil {
 		return err
@@ -215,22 +230,23 @@ func (s *ReservationStore) ensureQuota(ctx context.Context, tx *sql.Tx, email st
 	return err
 }
 
-func (s *ReservationStore) findReservationStatus(ctx context.Context, tx *sql.Tx, subscriptionID int64) (quotas.ReservationStatus, bool, error) {
+func (s *ReservationStore) findReservation(ctx context.Context, tx *sql.Tx, subscriptionID int64) (uuid.UUID, quotas.ReservationStatus, bool, error) {
+	var reservationSagaID uuid.UUID
 	var status quotas.ReservationStatus
 	err := tx.QueryRowContext(
 		ctx,
-		`select status from quota_reservations where subscription_id = $1 for update`,
+		`select reservation_saga_id, status from quota_reservations where subscription_id = $1 for update`,
 		subscriptionID,
-	).Scan(&status)
+	).Scan(&reservationSagaID, &status)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", false, nil
+			return uuid.Nil, "", false, nil
 		}
 
-		return "", false, err
+		return uuid.Nil, "", false, err
 	}
 
-	return status, true, nil
+	return reservationSagaID, status, true, nil
 }
 
 func (s *ReservationStore) lockQuota(ctx context.Context, tx *sql.Tx, email string) (int, int, error) {
@@ -248,7 +264,7 @@ func (s *ReservationStore) createRejectedReservation(ctx context.Context, tx *sq
 	_, err := tx.ExecContext(
 		ctx,
 		`
-			insert into quota_reservations (saga_id, subscription_id, email, status, rejection_reason)
+			insert into quota_reservations (reservation_saga_id, subscription_id, email, status, rejection_reason)
 			values ($1, $2, $3, 'rejected', $4);
 		`,
 		sagaID,
@@ -263,7 +279,7 @@ func (s *ReservationStore) createReservedReservation(ctx context.Context, tx *sq
 	_, err := tx.ExecContext(
 		ctx,
 		`
-			insert into quota_reservations (saga_id, subscription_id, email, status)
+			insert into quota_reservations (reservation_saga_id, subscription_id, email, status)
 			values ($1, $2, $3, 'reserved');
 		`,
 		sagaID,

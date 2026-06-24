@@ -135,7 +135,8 @@ func (x *ReserveSubscriptionSlotResponse) GetRejectionReason() string {
 
 type CommitSubscriptionSlotRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId int64                  `protobuf:"varint,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
+	SagaId         string                 `protobuf:"bytes,1,opt,name=saga_id,json=sagaId,proto3" json:"saga_id,omitempty"`
+	SubscriptionId int64                  `protobuf:"varint,2,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -168,6 +169,13 @@ func (x *CommitSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CommitSubscriptionSlotRequest.ProtoReflect.Descriptor instead.
 func (*CommitSubscriptionSlotRequest) Descriptor() ([]byte, []int) {
 	return file_quota_quota_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CommitSubscriptionSlotRequest) GetSagaId() string {
+	if x != nil {
+		return x.SagaId
+	}
+	return ""
 }
 
 func (x *CommitSubscriptionSlotRequest) GetSubscriptionId() int64 {
@@ -215,7 +223,8 @@ func (*CommitSubscriptionSlotResponse) Descriptor() ([]byte, []int) {
 
 type ReleaseSubscriptionSlotRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	SubscriptionId int64                  `protobuf:"varint,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
+	SagaId         string                 `protobuf:"bytes,1,opt,name=saga_id,json=sagaId,proto3" json:"saga_id,omitempty"`
+	SubscriptionId int64                  `protobuf:"varint,2,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -248,6 +257,13 @@ func (x *ReleaseSubscriptionSlotRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReleaseSubscriptionSlotRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseSubscriptionSlotRequest) Descriptor() ([]byte, []int) {
 	return file_quota_quota_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ReleaseSubscriptionSlotRequest) GetSagaId() string {
+	if x != nil {
+		return x.SagaId
+	}
+	return ""
 }
 
 func (x *ReleaseSubscriptionSlotRequest) GetSubscriptionId() int64 {
@@ -304,12 +320,14 @@ const file_quota_quota_proto_rawDesc = "" +
 	"\x05email\x18\x03 \x01(\tR\x05email\"h\n" +
 	"\x1fReserveSubscriptionSlotResponse\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\bR\breserved\x12)\n" +
-	"\x10rejection_reason\x18\x02 \x01(\tR\x0frejectionReason\"H\n" +
-	"\x1dCommitSubscriptionSlotRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\x03R\x0esubscriptionId\" \n" +
-	"\x1eCommitSubscriptionSlotResponse\"I\n" +
-	"\x1eReleaseSubscriptionSlotRequest\x12'\n" +
-	"\x0fsubscription_id\x18\x01 \x01(\x03R\x0esubscriptionId\"!\n" +
+	"\x10rejection_reason\x18\x02 \x01(\tR\x0frejectionReason\"a\n" +
+	"\x1dCommitSubscriptionSlotRequest\x12\x17\n" +
+	"\asaga_id\x18\x01 \x01(\tR\x06sagaId\x12'\n" +
+	"\x0fsubscription_id\x18\x02 \x01(\x03R\x0esubscriptionId\" \n" +
+	"\x1eCommitSubscriptionSlotResponse\"b\n" +
+	"\x1eReleaseSubscriptionSlotRequest\x12\x17\n" +
+	"\asaga_id\x18\x01 \x01(\tR\x06sagaId\x12'\n" +
+	"\x0fsubscription_id\x18\x02 \x01(\x03R\x0esubscriptionId\"!\n" +
 	"\x1fReleaseSubscriptionSlotResponse2\xc9\x02\n" +
 	"\fQuotaService\x12h\n" +
 	"\x17ReserveSubscriptionSlot\x12%.quota.ReserveSubscriptionSlotRequest\x1a&.quota.ReserveSubscriptionSlotResponse\x12e\n" +

@@ -36,10 +36,10 @@ func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_Returns
 	err = trackedRepositoryStore.UpdateLastSeenTag(ctx, repository.ID, "v1.11.0")
 	require.NoError(t, err)
 
-	firstSubscription, err := subscriptionStore.Create(ctx, firstUser.ID, repository.ID)
+	firstSubscription, err := subscriptionStore.CreatePending(ctx, firstUser.ID, repository.ID)
 	require.NoError(t, err)
 
-	secondSubscription, err := subscriptionStore.Create(ctx, secondUser.ID, repository.ID)
+	secondSubscription, err := subscriptionStore.CreatePending(ctx, secondUser.ID, repository.ID)
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())

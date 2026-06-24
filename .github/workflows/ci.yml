@@ -61,6 +61,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Run buf lint
+        uses: bufbuild/buf-action@v1
+        with:
+          lint: true
+          format: false
+          breaking: false
+          push: false
+          archive: false
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:

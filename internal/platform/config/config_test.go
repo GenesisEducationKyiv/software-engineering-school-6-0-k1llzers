@@ -10,13 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoad_ReturnsDefaultsWhenFileDoesNotExist(t *testing.T) {
-	cfg, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
-	require.NoError(t, err)
-	require.Equal(t, Default(), cfg)
+func TestLoad_ReturnsErrorWhenFileDoesNotExist(t *testing.T) {
+	_, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
+	require.Error(t, err)
 }
 
-func TestLoad_OverridesDefaultsFromYAML(t *testing.T) {
+func TestLoad_ReadsConfigFromYAML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
@@ -34,6 +33,9 @@ mail:
   password: "pass"
   from: "noreply@example.com"
   api_base_url: "http://localhost:8080/api"
+quota:
+  grpc_port: "9091"
+  default_subscription_limit: 5
 logging:
   level: "debug"
   format: "text"
@@ -51,11 +53,13 @@ logging:
 	require.Equal(t, "pass", cfg.Mail.Password)
 	require.Equal(t, "noreply@example.com", cfg.Mail.From)
 	require.Equal(t, "http://localhost:8080/api", cfg.Mail.ApiBaseUrl)
+	require.Equal(t, "9091", cfg.Quota.GRPCPort)
+	require.Equal(t, 5, cfg.Quota.DefaultSubscriptionLimit)
 	require.Equal(t, "debug", cfg.Logging.Level)
 	require.Equal(t, "text", cfg.Logging.Format)
 }
 
-func TestLoad_AppliesDefaultsForMissingFields(t *testing.T) {
+func TestLoad_DoesNotApplyDefaultsForMissingFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
@@ -67,13 +71,13 @@ github:
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
-	require.Equal(t, Default().Server.Port, cfg.Server.Port)
-	require.Equal(t, Default().Database.URL, cfg.Database.URL)
+	require.Empty(t, cfg.Server.Port)
+	require.Empty(t, cfg.Database.URL)
 	require.Equal(t, "secret", cfg.GitHub.Token)
-	require.Equal(t, Default().Mail.Port, cfg.Mail.Port)
-	require.Equal(t, Default().Mail.ApiBaseUrl, cfg.Mail.ApiBaseUrl)
-	require.Equal(t, Default().Logging.Level, cfg.Logging.Level)
-	require.Equal(t, Default().Logging.Format, cfg.Logging.Format)
+	require.Zero(t, cfg.Mail.Port)
+	require.Empty(t, cfg.Mail.ApiBaseUrl)
+	require.Empty(t, cfg.Logging.Level)
+	require.Empty(t, cfg.Logging.Format)
 }
 
 func TestLoad_ReturnsErrorForInvalidYAML(t *testing.T) {
@@ -87,7 +91,7 @@ func TestLoad_ReturnsErrorForInvalidYAML(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestLoad_AppliesMailDefaultsWhenOnlyMailSectionExists(t *testing.T) {
+func TestLoad_ReadsPartialConfigWithoutFillingMissingValues(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
@@ -100,29 +104,13 @@ mail:
 	cfg, err := Load(path)
 	require.NoError(t, err)
 	require.Equal(t, "smtp.example.com", cfg.Mail.Host)
-	require.Equal(t, Default().Mail.Port, cfg.Mail.Port)
-	require.Equal(t, Default().Mail.ApiBaseUrl, cfg.Mail.ApiBaseUrl)
-	require.Equal(t, Default().Logging.Level, cfg.Logging.Level)
-	require.Equal(t, Default().Logging.Format, cfg.Logging.Format)
+	require.Zero(t, cfg.Mail.Port)
+	require.Empty(t, cfg.Mail.ApiBaseUrl)
+	require.Empty(t, cfg.Logging.Level)
+	require.Empty(t, cfg.Logging.Format)
 }
 
-func TestLoad_UsesDefaultPathWhenEmptyPathProvided(t *testing.T) {
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-
-	dir := t.TempDir()
-	require.NoError(t, os.Chdir(dir))
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(wd))
-	})
-
-	err = os.WriteFile("app-config.yaml", []byte(`
-server:
-  port: "9191"
-`), 0o644)
-	require.NoError(t, err)
-
-	cfg, err := Load("")
-	require.NoError(t, err)
-	require.Equal(t, "9191", cfg.Server.Port)
+func TestLoad_ReturnsErrorWhenPathIsEmpty(t *testing.T) {
+	_, err := Load("")
+	require.Error(t, err)
 }

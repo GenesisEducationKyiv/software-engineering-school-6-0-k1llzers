@@ -24,6 +24,18 @@ services:
       - rabbitmq
     restart: unless-stopped
 
+  quota-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: quota-service
+    container_name: "github-release-notifier-quota-service"
+    depends_on:
+      - db
+    ports:
+      - 9091:9091
+    restart: unless-stopped
+
   db:
     image: "postgres:16-alpine"
     container_name: "github-release-notifier-db"
@@ -33,6 +45,7 @@ services:
     volumes:
       - data:/var/lib/postgresql/data
       - ./docker/postgres/init/create_notification_db.sql:/docker-entrypoint-initdb.d/create_notification_db.sql:ro
+      - ./docker/postgres/init/create_quota_db.sql:/docker-entrypoint-initdb.d/create_quota_db.sql:ro
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: 1111
@@ -92,6 +105,7 @@ services:
     depends_on:
       - app
       - notification-service
+      - quota-service
       - loki
     restart: unless-stopped
     command:

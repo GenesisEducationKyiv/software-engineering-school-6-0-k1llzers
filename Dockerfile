@@ -11,9 +11,11 @@ COPY migrations ./migrations
 COPY pkg ./pkg
 COPY app-config.yaml ./app-config.yaml
 COPY notification-config.yaml ./notification-config.yaml
+COPY quota-config.yaml ./quota-config.yaml
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/app ./cmd/app
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/notification-service ./cmd/notification-service
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/quota-service ./cmd/quota-service
 
 FROM alpine:3.22 AS app
 
@@ -44,3 +46,19 @@ COPY notification-config.yaml ./notification-config.yaml
 USER appuser
 
 CMD ["./notification-service"]
+
+FROM alpine:3.22 AS quota-service
+
+WORKDIR /app
+
+RUN adduser -D -H appuser
+
+COPY --from=builder /out/quota-service ./quota-service
+COPY migrations ./migrations
+COPY quota-config.yaml ./quota-config.yaml
+
+USER appuser
+
+EXPOSE 9091
+
+CMD ["./quota-service"]

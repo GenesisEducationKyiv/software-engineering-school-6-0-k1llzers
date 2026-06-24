@@ -67,8 +67,6 @@ func (s *SubscriptionStore) ConfirmByToken(ctx context.Context, confirmationToke
 		ctx,
 		query,
 		confirmationToken,
-		subscriptions.SagaOperationSubscribe,
-		subscriptions.SagaStatusCompleted,
 	)
 	if err != nil {
 		return err

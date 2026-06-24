@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -22,12 +23,13 @@ func TestReservationStore_ReserveSlotCreatesReservation(t *testing.T) {
 	store := NewReservationStore(db)
 	ctx := context.Background()
 	sagaID := uuid.New()
+	subscriptionID := newTestSubscriptionID()
 
-	result, err := store.ReserveSlot(ctx, sagaID, 10, test.NewTestEmail(), 5)
+	result, err := store.ReserveSlot(ctx, sagaID, subscriptionID, test.NewTestEmail(), 5)
 
 	require.NoError(t, err)
 	require.True(t, result.Reserved)
-	requireQuotaUsage(t, db, 10, sagaID, quotas.ReservationStatusReserved, 1)
+	requireQuotaUsage(t, db, subscriptionID, sagaID, quotas.ReservationStatusReserved, 1)
 }
 
 func TestReservationStore_ReserveSlotIsIdempotentForSameSaga(t *testing.T) {
@@ -36,16 +38,17 @@ func TestReservationStore_ReserveSlotIsIdempotentForSameSaga(t *testing.T) {
 	ctx := context.Background()
 	email := test.NewTestEmail()
 	sagaID := uuid.New()
+	subscriptionID := newTestSubscriptionID()
 
-	firstResult, err := store.ReserveSlot(ctx, sagaID, 10, email, 5)
+	firstResult, err := store.ReserveSlot(ctx, sagaID, subscriptionID, email, 5)
 	require.NoError(t, err)
 	require.True(t, firstResult.Reserved)
 
-	secondResult, err := store.ReserveSlot(ctx, sagaID, 10, email, 5)
+	secondResult, err := store.ReserveSlot(ctx, sagaID, subscriptionID, email, 5)
 
 	require.NoError(t, err)
 	require.True(t, secondResult.Reserved)
-	requireQuotaUsage(t, db, 10, sagaID, quotas.ReservationStatusReserved, 1)
+	requireQuotaUsage(t, db, subscriptionID, sagaID, quotas.ReservationStatusReserved, 1)
 }
 
 func TestReservationStore_ReserveSlotRejectsDifferentSagaForExistingSubscription(t *testing.T) {
@@ -54,14 +57,15 @@ func TestReservationStore_ReserveSlotRejectsDifferentSagaForExistingSubscription
 	ctx := context.Background()
 	email := test.NewTestEmail()
 	firstSagaID := uuid.New()
+	subscriptionID := newTestSubscriptionID()
 
-	_, err := store.ReserveSlot(ctx, firstSagaID, 10, email, 5)
+	_, err := store.ReserveSlot(ctx, firstSagaID, subscriptionID, email, 5)
 	require.NoError(t, err)
 
-	_, err = store.ReserveSlot(ctx, uuid.New(), 10, email, 5)
+	_, err = store.ReserveSlot(ctx, uuid.New(), subscriptionID, email, 5)
 
 	require.ErrorIs(t, err, quotas.ErrReservationSagaMismatch)
-	requireQuotaUsage(t, db, 10, firstSagaID, quotas.ReservationStatusReserved, 1)
+	requireQuotaUsage(t, db, subscriptionID, firstSagaID, quotas.ReservationStatusReserved, 1)
 }
 
 func TestReservationStore_ReleaseSlotIsIdempotentForSameSaga(t *testing.T) {
@@ -71,16 +75,17 @@ func TestReservationStore_ReleaseSlotIsIdempotentForSameSaga(t *testing.T) {
 	email := test.NewTestEmail()
 	reserveSagaID := uuid.New()
 	releaseSagaID := uuid.New()
+	subscriptionID := newTestSubscriptionID()
 
-	_, err := store.ReserveSlot(ctx, reserveSagaID, 10, email, 5)
+	_, err := store.ReserveSlot(ctx, reserveSagaID, subscriptionID, email, 5)
 	require.NoError(t, err)
 
-	err = store.ReleaseSlot(ctx, releaseSagaID, 10)
+	err = store.ReleaseSlot(ctx, releaseSagaID, subscriptionID)
 	require.NoError(t, err)
-	err = store.ReleaseSlot(ctx, releaseSagaID, 10)
+	err = store.ReleaseSlot(ctx, releaseSagaID, subscriptionID)
 	require.NoError(t, err)
 
-	requireQuotaUsage(t, db, 10, reserveSagaID, quotas.ReservationStatusReleased, 0)
+	requireQuotaUsage(t, db, subscriptionID, reserveSagaID, quotas.ReservationStatusReleased, 0)
 }
 
 func TestReservationStore_ReleaseSlotRejectsDifferentSagaForReleasedReservation(t *testing.T) {
@@ -89,16 +94,22 @@ func TestReservationStore_ReleaseSlotRejectsDifferentSagaForReleasedReservation(
 	ctx := context.Background()
 	email := test.NewTestEmail()
 	reserveSagaID := uuid.New()
+	subscriptionID := newTestSubscriptionID()
 
-	_, err := store.ReserveSlot(ctx, reserveSagaID, 10, email, 5)
+	_, err := store.ReserveSlot(ctx, reserveSagaID, subscriptionID, email, 5)
 	require.NoError(t, err)
-	err = store.ReleaseSlot(ctx, uuid.New(), 10)
+	err = store.ReleaseSlot(ctx, uuid.New(), subscriptionID)
 	require.NoError(t, err)
 
-	err = store.ReleaseSlot(ctx, uuid.New(), 10)
+	err = store.ReleaseSlot(ctx, uuid.New(), subscriptionID)
 
 	require.ErrorIs(t, err, quotas.ErrReservationSagaMismatch)
-	requireQuotaUsage(t, db, 10, reserveSagaID, quotas.ReservationStatusReleased, 0)
+	requireQuotaUsage(t, db, subscriptionID, reserveSagaID, quotas.ReservationStatusReleased, 0)
+}
+
+func newTestSubscriptionID() int64 {
+	id := uuid.New()
+	return int64(binary.BigEndian.Uint64(id[:8]) & 0x7fffffffffffffff)
 }
 
 func setupQuotaTestDB(t *testing.T) *sql.DB {

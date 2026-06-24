@@ -135,7 +135,7 @@ func buildApplication(pg *sql.DB, cfg config.Config, appMetrics *metrics.Metrics
 	integrationPublisher := newIntegrationOutboxPublisher(cfg.RabbitMQ, integrationOutboxStore)
 	notificationService := notifications.NewService(integrationOutboxStore)
 
-	quotaConn, err := grpc.Dial(cfg.Quota.GRPCAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	quotaConn, err := grpc.NewClient(cfg.Quota.GRPCAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}

@@ -151,7 +151,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 	requireSubscribeSagaStatus(t, db, created.ID, subscriptions.SagaStatusCompleted)
 }
 
-func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalidTokenWhenPendingQuota(t *testing.T) {
+func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ConfirmsPendingSubscription(t *testing.T) {
 	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
@@ -172,8 +172,13 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 	require.NoError(t, err)
 
 	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
-	require.ErrorIs(t, err, subscriptions.ErrInvalidToken)
+	require.NoError(t, err)
 	requireNoSubscribeSaga(t, db, created.ID)
+
+	var confirmed bool
+	err = db.QueryRowContext(ctx, `select confirmed from subscriptions where id = $1`, created.ID).Scan(&confirmed)
+	require.NoError(t, err)
+	require.True(t, confirmed)
 }
 
 func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalidTokenWhenAlreadyConfirmed(t *testing.T) {

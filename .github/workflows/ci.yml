@@ -69,6 +69,7 @@ jobs:
           breaking: false
           push: false
           archive: false
+          pr_comment: false
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9

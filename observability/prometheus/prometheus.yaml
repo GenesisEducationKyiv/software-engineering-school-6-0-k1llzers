@@ -11,6 +11,14 @@ scrape_configs:
           service: github-release-notifier
           environment: dev
 
+  - job_name: github-release-notifier-notification-service
+    static_configs:
+      - targets:
+          - notification-service:8081
+        labels:
+          service: github-release-notifier-notification-service
+          environment: dev
+
   - job_name: prometheus
     static_configs:
       - targets:

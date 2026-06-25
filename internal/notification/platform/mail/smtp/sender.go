@@ -8,7 +8,7 @@ import (
 	"net/smtp"
 	"strings"
 
-	"github-release-notifier/internal/app/notifications"
+	"github-release-notifier/internal/notification/notifications"
 )
 
 type Config struct {

@@ -5,7 +5,7 @@ package smtp
 import (
 	"testing"
 
-	"github-release-notifier/internal/app/notifications"
+	"github-release-notifier/internal/notification/notifications"
 
 	"github.com/stretchr/testify/require"
 )

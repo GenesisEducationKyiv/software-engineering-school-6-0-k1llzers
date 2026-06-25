@@ -7,12 +7,12 @@ discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
 
-discovery.relabel "app_logs" {
+discovery.relabel "application_logs" {
   targets = discovery.docker.containers.targets
 
   rule {
     source_labels = ["__meta_docker_container_name"]
-    regex         = "/github-release-notifier-app"
+    regex         = "/github-release-notifier-(app|notification-service)"
     action        = "keep"
   }
 
@@ -22,8 +22,10 @@ discovery.relabel "app_logs" {
   }
 
   rule {
-    target_label = "service_name"
-    replacement  = "github-release-notifier"
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/github-release-notifier-(.*)"
+    target_label  = "service_name"
+    replacement   = "$1"
   }
 
   rule {
@@ -32,7 +34,7 @@ discovery.relabel "app_logs" {
   }
 }
 
-loki.process "app_logs" {
+loki.process "application_logs" {
   stage.json {
     expressions = {
       level     = "level",
@@ -50,10 +52,10 @@ loki.process "app_logs" {
   forward_to = [loki.write.default.receiver]
 }
 
-loki.source.docker "app_logs" {
+loki.source.docker "application_logs" {
   host       = "unix:///var/run/docker.sock"
-  targets    = discovery.relabel.app_logs.output
-  forward_to = [loki.process.app_logs.receiver]
+  targets    = discovery.relabel.application_logs.output
+  forward_to = [loki.process.application_logs.receiver]
 }
 
 loki.write "default" {

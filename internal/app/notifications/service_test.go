@@ -4,58 +4,32 @@ package notifications
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
+
+	integrationoutbox "github-release-notifier/internal/app/platform/messaging/outbox"
+	notificationcontracts "github-release-notifier/pkg/contracts/notifications"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-type rendererStub struct {
-	emails map[string]RenderedEmail
-	data   map[string]any
-	errs   map[string]error
-}
-
-func (s *rendererStub) Render(kind string, data any) (RenderedEmail, error) {
-	if s.data == nil {
-		s.data = make(map[string]any)
-	}
-	s.data[kind] = data
-
-	if err := s.errs[kind]; err != nil {
-		return RenderedEmail{}, err
-	}
-
-	return s.emails[kind], nil
-}
-
 type outboxWriterStub struct {
-	err            error
-	recipientEmail string
-	email          Email
-	called         bool
+	err     error
+	message integrationoutbox.Message
+	called  bool
 }
 
-func (s *outboxWriterStub) Create(_ context.Context, recipientEmail string, email Email) error {
+func (s *outboxWriterStub) Create(_ context.Context, message integrationoutbox.Message) error {
 	s.called = true
-	s.recipientEmail = recipientEmail
-	s.email = email
+	s.message = message
 	return s.err
 }
 
 func TestService_QueueSubscriptionConfirmation(t *testing.T) {
-	renderer := &rendererStub{
-		emails: map[string]RenderedEmail{
-			templateKindConfirmation: {
-				Subject:  "Confirm subscription",
-				HTMLBody: "<p>body</p>",
-			},
-		},
-	}
 	outboxStore := &outboxWriterStub{}
-	service := NewService(renderer, outboxStore, "http://localhost:8080/api/")
+	service := NewService(outboxStore)
 	confirmationToken := uuid.New()
 	cancellationToken := uuid.New()
 
@@ -69,37 +43,20 @@ func TestService_QueueSubscriptionConfirmation(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, outboxStore.called)
-	require.Equal(t, "user@example.com", outboxStore.recipientEmail)
-	require.Equal(t, Email{Subject: "Confirm subscription", HTMLBody: "<p>body</p>"}, outboxStore.email)
-	confirmationData := renderer.data[templateKindConfirmation].(ConfirmationTemplateData)
-	require.Equal(t, "gin-gonic/gin", confirmationData.RepositoryFullName)
-	require.Equal(t, fmt.Sprintf("http://localhost:8080/api/confirm/%s", confirmationToken), confirmationData.ConfirmationURL)
-	require.Equal(t, fmt.Sprintf("http://localhost:8080/api/unsubscribe/%s", cancellationToken), confirmationData.CancellationURL)
-}
+	require.NotEqual(t, uuid.Nil, outboxStore.message.MessageID)
+	require.Equal(t, string(notificationcontracts.TypeSubscriptionConfirmationRequested), outboxStore.message.MessageType)
 
-func TestService_QueueSubscriptionConfirmation_ReturnsRendererError(t *testing.T) {
-	expectedErr := errors.New("render failed")
-	service := NewService(&rendererStub{errs: map[string]error{templateKindConfirmation: expectedErr}}, &outboxWriterStub{}, "http://localhost:8080/api")
-
-	err := service.QueueSubscriptionConfirmation(
-		context.Background(),
-		"user@example.com",
-		"gin-gonic/gin",
-		uuid.New(),
-		uuid.New(),
-	)
-
-	require.ErrorIs(t, err, expectedErr)
-	require.Contains(t, err.Error(), "render confirmation email")
+	var payload notificationcontracts.SubscriptionConfirmationRequested
+	require.NoError(t, json.Unmarshal(outboxStore.message.PayloadJSON, &payload))
+	require.Equal(t, "user@example.com", payload.RecipientEmail)
+	require.Equal(t, "gin-gonic/gin", payload.RepositoryFullName)
+	require.Equal(t, confirmationToken, payload.ConfirmationToken)
+	require.Equal(t, cancellationToken, payload.CancellationToken)
 }
 
 func TestService_QueueSubscriptionConfirmation_ReturnsOutboxError(t *testing.T) {
 	expectedErr := errors.New("enqueue failed")
-	service := NewService(
-		&rendererStub{emails: map[string]RenderedEmail{templateKindConfirmation: {Subject: "subject", HTMLBody: "body"}}},
-		&outboxWriterStub{err: expectedErr},
-		"http://localhost:8080/api",
-	)
+	service := NewService(&outboxWriterStub{err: expectedErr})
 
 	err := service.QueueSubscriptionConfirmation(
 		context.Background(),
@@ -110,20 +67,11 @@ func TestService_QueueSubscriptionConfirmation_ReturnsOutboxError(t *testing.T) 
 	)
 
 	require.ErrorIs(t, err, expectedErr)
-	require.Contains(t, err.Error(), "enqueue confirmation email")
 }
 
 func TestService_QueueReleaseNotification(t *testing.T) {
-	renderer := &rendererStub{
-		emails: map[string]RenderedEmail{
-			templateKindRelease: {
-				Subject:  "New release",
-				HTMLBody: "<p>release</p>",
-			},
-		},
-	}
 	outboxStore := &outboxWriterStub{}
-	service := NewService(renderer, outboxStore, "http://localhost:8080/api")
+	service := NewService(outboxStore)
 	cancellationToken := uuid.New()
 
 	err := service.QueueReleaseNotification(
@@ -137,38 +85,21 @@ func TestService_QueueReleaseNotification(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, outboxStore.called)
-	require.Equal(t, Email{Subject: "New release", HTMLBody: "<p>release</p>"}, outboxStore.email)
-	releaseData := renderer.data[templateKindRelease].(ReleaseTemplateData)
-	require.Equal(t, "gin-gonic/gin", releaseData.RepositoryFullName)
-	require.Equal(t, "v1.11.0", releaseData.TagName)
-	require.Equal(t, "https://github.com/gin-gonic/gin/releases/tag/v1.11.0", releaseData.ReleaseURL)
-	require.Equal(t, fmt.Sprintf("http://localhost:8080/api/unsubscribe/%s", cancellationToken), releaseData.CancellationURL)
-}
+	require.NotEqual(t, uuid.Nil, outboxStore.message.MessageID)
+	require.Equal(t, string(notificationcontracts.TypeReleaseNotificationRequested), outboxStore.message.MessageType)
 
-func TestService_QueueReleaseNotification_ReturnsRendererError(t *testing.T) {
-	expectedErr := errors.New("render failed")
-	service := NewService(&rendererStub{errs: map[string]error{templateKindRelease: expectedErr}}, &outboxWriterStub{}, "http://localhost:8080/api")
-
-	err := service.QueueReleaseNotification(
-		context.Background(),
-		"user@example.com",
-		"gin-gonic/gin",
-		"v1.11.0",
-		"https://example.com/release",
-		uuid.New(),
-	)
-
-	require.ErrorIs(t, err, expectedErr)
-	require.Contains(t, err.Error(), "render release email")
+	var payload notificationcontracts.ReleaseNotificationRequested
+	require.NoError(t, json.Unmarshal(outboxStore.message.PayloadJSON, &payload))
+	require.Equal(t, "user@example.com", payload.RecipientEmail)
+	require.Equal(t, "gin-gonic/gin", payload.RepositoryFullName)
+	require.Equal(t, "v1.11.0", payload.TagName)
+	require.Equal(t, "https://github.com/gin-gonic/gin/releases/tag/v1.11.0", payload.ReleaseURL)
+	require.Equal(t, cancellationToken, payload.CancellationToken)
 }
 
 func TestService_QueueReleaseNotification_ReturnsOutboxError(t *testing.T) {
 	expectedErr := errors.New("enqueue failed")
-	service := NewService(
-		&rendererStub{emails: map[string]RenderedEmail{templateKindRelease: {Subject: "subject", HTMLBody: "body"}}},
-		&outboxWriterStub{err: expectedErr},
-		"http://localhost:8080/api",
-	)
+	service := NewService(&outboxWriterStub{err: expectedErr})
 
 	err := service.QueueReleaseNotification(
 		context.Background(),
@@ -180,5 +111,4 @@ func TestService_QueueReleaseNotification_ReturnsOutboxError(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, expectedErr)
-	require.Contains(t, err.Error(), "enqueue release email")
 }

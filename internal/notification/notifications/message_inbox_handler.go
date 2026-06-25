@@ -21,24 +21,12 @@ type messageInboxStore interface {
 type messageDelivery interface {
 	Deliver(ctx context.Context, message notificationcontracts.Envelope) error
 }
-
-type noopMessageDelivery struct{}
-
-func (noopMessageDelivery) Deliver(_ context.Context, _ notificationcontracts.Envelope) error {
-	// TODO: replace noop delivery with actual notification email delivery.
-	return nil
-}
-
 type MessageInboxHandler struct {
 	inbox    messageInboxStore
 	delivery messageDelivery
 }
 
 func NewMessageInboxHandler(inbox messageInboxStore, delivery messageDelivery) *MessageInboxHandler {
-	if delivery == nil {
-		delivery = noopMessageDelivery{}
-	}
-
 	return &MessageInboxHandler{
 		inbox:    inbox,
 		delivery: delivery,

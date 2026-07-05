@@ -4,11 +4,11 @@ package repository
 
 import (
 	"context"
-	"github-release-notifier/internal/platform/db/test"
 	"testing"
 
 	releasetracking "github-release-notifier/internal/app/release_tracking"
 	subscriptionsrepo "github-release-notifier/internal/app/subscriptions/repository"
+	"github-release-notifier/internal/platform/db/test"
 
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +42,7 @@ func TestConfirmedSubscriptionStore_ListConfirmedRepositorySubscriptions_Returns
 	secondSubscription, err := subscriptionStore.CreatePending(ctx, secondUser.ID, repository.ID)
 	require.NoError(t, err)
 
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())
+	err = subscriptionStore.ConfirmByToken(ctx, firstSubscription.ConfirmationToken.String())
 	require.NoError(t, err)
 
 	items, err := confirmedSubscriptionStore.ListConfirmedRepositorySubscriptions(ctx)

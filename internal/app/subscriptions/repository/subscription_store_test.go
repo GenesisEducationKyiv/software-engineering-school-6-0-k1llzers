@@ -122,7 +122,7 @@ func TestSubscriptionStore_DeleteByID(t *testing.T) {
 	requireSubscriptionMissing(t, db, created.ID)
 }
 
-func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) {
+func TestSubscriptionStore_ConfirmByToken(t *testing.T) {
 	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
@@ -141,7 +141,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 
 	created := createCompletedSubscription(t, db, subscriptionStore, ctx, user.ID, trackedRepository.ID)
 
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
+	err = subscriptionStore.ConfirmByToken(ctx, created.ConfirmationToken.String())
 	require.NoError(t, err)
 
 	var confirmed bool
@@ -151,7 +151,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue(t *testing.T) 
 	requireSubscribeSagaStatus(t, db, created.ID, subscriptions.SagaStatusCompleted)
 }
 
-func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ConfirmsPendingSubscription(t *testing.T) {
+func TestSubscriptionStore_ConfirmByToken_ConfirmsPendingSubscription(t *testing.T) {
 	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
@@ -171,7 +171,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ConfirmsPendin
 	created, err := subscriptionStore.CreatePending(ctx, user.ID, trackedRepository.ID)
 	require.NoError(t, err)
 
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
+	err = subscriptionStore.ConfirmByToken(ctx, created.ConfirmationToken.String())
 	require.NoError(t, err)
 	requireNoSubscribeSaga(t, db, created.ID)
 
@@ -181,7 +181,7 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ConfirmsPendin
 	require.True(t, confirmed)
 }
 
-func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalidTokenWhenAlreadyConfirmed(t *testing.T) {
+func TestSubscriptionStore_ConfirmByToken_ReturnsInvalidTokenWhenAlreadyConfirmed(t *testing.T) {
 	db := test.SetupTestDB(t)
 
 	userStore := NewUserStore(db)
@@ -200,18 +200,18 @@ func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_ReturnsInvalid
 
 	created := createCompletedSubscription(t, db, subscriptionStore, ctx, user.ID, trackedRepository.ID)
 
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
+	err = subscriptionStore.ConfirmByToken(ctx, created.ConfirmationToken.String())
 	require.NoError(t, err)
 
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, created.ConfirmationToken.String())
+	err = subscriptionStore.ConfirmByToken(ctx, created.ConfirmationToken.String())
 	require.ErrorIs(t, err, subscriptions.ErrInvalidToken)
 }
 
-func TestSubscriptionStore_SetConfirmedByTokenAndConfirmedNotTrue_NotFound(t *testing.T) {
+func TestSubscriptionStore_ConfirmByToken_NotFound(t *testing.T) {
 	db := test.SetupTestDB(t)
 	subscriptionStore := NewSubscriptionStore(db)
 
-	err := subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(context.Background(), uuid.NewString())
+	err := subscriptionStore.ConfirmByToken(context.Background(), uuid.NewString())
 	require.ErrorIs(t, err, shared.ErrNotFound)
 }
 
@@ -331,7 +331,7 @@ func TestSubscriptionStore_ListByEmail(t *testing.T) {
 
 	_ = createCompletedSubscription(t, db, subscriptionStore, ctx, user.ID, secondRepo.ID)
 
-	err = subscriptionStore.SetConfirmedByTokenAndConfirmedNotTrue(ctx, firstSubscription.ConfirmationToken.String())
+	err = subscriptionStore.ConfirmByToken(ctx, firstSubscription.ConfirmationToken.String())
 	require.NoError(t, err)
 
 	items, err := subscriptionStore.ListByEmail(ctx, email)

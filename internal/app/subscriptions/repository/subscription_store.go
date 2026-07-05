@@ -92,10 +92,6 @@ func (s *SubscriptionStore) ConfirmByToken(ctx context.Context, confirmationToke
 	return nil
 }
 
-func (s *SubscriptionStore) SetConfirmedByTokenAndConfirmedNotTrue(ctx context.Context, confirmationToken string) error {
-	return s.ConfirmByToken(ctx, confirmationToken)
-}
-
 func (s *SubscriptionStore) FindByCancellationToken(ctx context.Context, cancellationToken string) (subscriptions.Subscription, error) {
 	query := `
 		select
@@ -144,10 +140,6 @@ func (s *SubscriptionStore) CancelByCancellationToken(ctx context.Context, cance
 	}
 
 	return nil
-}
-
-func (s *SubscriptionStore) DeleteByCancellationToken(ctx context.Context, cancellationToken string) error {
-	return s.CancelByCancellationToken(ctx, cancellationToken)
 }
 
 func (s *SubscriptionStore) DeleteByID(ctx context.Context, subscriptionID int64) error {

@@ -39,7 +39,7 @@ func (s *Server) ReserveSubscriptionSlot(ctx context.Context, req *quotapb.Reser
 
 	result, err := s.quotas.ReserveSubscriptionSlot(ctx, sagaID, req.GetSubscriptionId(), req.GetEmail())
 	if err != nil {
-		return nil, status.Error(codes.Internal, "reserve subscription slot failed")
+		return nil, mapQuotaError(err, "reserve subscription slot failed")
 	}
 
 	return &quotapb.ReserveSubscriptionSlotResponse{
@@ -49,11 +49,16 @@ func (s *Server) ReserveSubscriptionSlot(ctx context.Context, req *quotapb.Reser
 }
 
 func (s *Server) CommitSubscriptionSlot(ctx context.Context, req *quotapb.CommitSubscriptionSlotRequest) (*quotapb.CommitSubscriptionSlotResponse, error) {
+	sagaID, err := parseSagaID(req.GetSagaId())
+	if err != nil {
+		return nil, err
+	}
+
 	if err := validateSubscriptionID(req.GetSubscriptionId()); err != nil {
 		return nil, err
 	}
 
-	if err := s.quotas.CommitSubscriptionSlot(ctx, req.GetSubscriptionId()); err != nil {
+	if err := s.quotas.CommitSubscriptionSlot(ctx, sagaID, req.GetSubscriptionId()); err != nil {
 		return nil, mapQuotaError(err, "commit subscription slot failed")
 	}
 
@@ -61,15 +66,29 @@ func (s *Server) CommitSubscriptionSlot(ctx context.Context, req *quotapb.Commit
 }
 
 func (s *Server) ReleaseSubscriptionSlot(ctx context.Context, req *quotapb.ReleaseSubscriptionSlotRequest) (*quotapb.ReleaseSubscriptionSlotResponse, error) {
+	sagaID, err := parseSagaID(req.GetSagaId())
+	if err != nil {
+		return nil, err
+	}
+
 	if err := validateSubscriptionID(req.GetSubscriptionId()); err != nil {
 		return nil, err
 	}
 
-	if err := s.quotas.ReleaseSubscriptionSlot(ctx, req.GetSubscriptionId()); err != nil {
-		return nil, status.Error(codes.Internal, "release subscription slot failed")
+	if err := s.quotas.ReleaseSubscriptionSlot(ctx, sagaID, req.GetSubscriptionId()); err != nil {
+		return nil, mapQuotaError(err, "release subscription slot failed")
 	}
 
 	return &quotapb.ReleaseSubscriptionSlotResponse{}, nil
+}
+
+func parseSagaID(raw string) (uuid.UUID, error) {
+	sagaID, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, status.Error(codes.InvalidArgument, "invalid saga_id")
+	}
+
+	return sagaID, nil
 }
 
 func validateSubscriptionID(subscriptionID int64) error {
@@ -86,6 +105,8 @@ func mapQuotaError(err error, fallbackMessage string) error {
 		return status.Error(codes.NotFound, "quota reservation not found")
 	case errors.Is(err, quotas.ErrReservationCannotBeCommitted):
 		return status.Error(codes.FailedPrecondition, "quota reservation cannot be committed")
+	case errors.Is(err, quotas.ErrReservationSagaMismatch):
+		return status.Error(codes.FailedPrecondition, "quota reservation belongs to another saga")
 	default:
 		return status.Error(codes.Internal, fallbackMessage)
 	}

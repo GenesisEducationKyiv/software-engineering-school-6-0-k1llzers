@@ -34,6 +34,7 @@ mail:
   from: "noreply@example.com"
   api_base_url: "http://localhost:8080/api"
 quota:
+  grpc_address: "quota-service:9091"
   grpc_port: "9091"
   default_subscription_limit: 5
 logging:
@@ -53,6 +54,7 @@ logging:
 	require.Equal(t, "pass", cfg.Mail.Password)
 	require.Equal(t, "noreply@example.com", cfg.Mail.From)
 	require.Equal(t, "http://localhost:8080/api", cfg.Mail.ApiBaseUrl)
+	require.Equal(t, "quota-service:9091", cfg.Quota.GRPCAddress)
 	require.Equal(t, "9091", cfg.Quota.GRPCPort)
 	require.Equal(t, 5, cfg.Quota.DefaultSubscriptionLimit)
 	require.Equal(t, "debug", cfg.Logging.Level)

@@ -51,6 +51,13 @@ func TestValidateConfig_RequiresFields(t *testing.T) {
 			},
 			expectedErr: "rabbitmq.notification_queue is required",
 		},
+		{
+			name: "quota grpc address",
+			mutate: func(cfg *config.Config) {
+				cfg.Quota.GRPCAddress = ""
+			},
+			expectedErr: "quota.grpc_address is required",
+		},
 	}
 
 	for _, tt := range tests {
@@ -83,6 +90,9 @@ func validAppConfig() config.Config {
 			URL:                  "amqp://guest:guest@localhost:5672/",
 			NotificationExchange: "notifications",
 			NotificationQueue:    "notification-service",
+		},
+		Quota: config.QuotaConfig{
+			GRPCAddress: "localhost:9091",
 		},
 	}
 }

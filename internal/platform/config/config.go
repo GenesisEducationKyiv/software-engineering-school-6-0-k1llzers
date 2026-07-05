@@ -51,6 +51,7 @@ type MailConfig struct {
 }
 
 type QuotaConfig struct {
+	GRPCAddress              string `yaml:"grpc_address"`
 	GRPCPort                 string `yaml:"grpc_port"`
 	DefaultSubscriptionLimit int    `yaml:"default_subscription_limit"`
 }

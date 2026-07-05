@@ -66,6 +66,7 @@ var subscriptionCreateErrorResponder = newErrorResponder(
 	[]rules.Rule[error, errorResponse]{
 		{Match: matchDomainError(subscriptions.ErrIncorrectRepositoryFormat), Handle: withErrorMessage(http.StatusBadRequest)},
 		{Match: matchDomainError(subscriptions.ErrAlreadyExists), Handle: withErrorMessage(http.StatusConflict)},
+		{Match: matchDomainError(subscriptions.ErrQuotaRejected), Handle: withErrorMessage(http.StatusConflict)},
 		{Match: matchDomainError(shared.ErrNotFound), Handle: withErrorMessage(http.StatusNotFound)},
 		{Match: matchDomainError(shared.ErrRateLimited), Handle: withStaticMessage(http.StatusServiceUnavailable, "github is temporarily unavailable, please try again later")},
 	},

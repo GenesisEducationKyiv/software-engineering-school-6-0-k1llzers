@@ -2,6 +2,7 @@ package quota
 
 import (
 	"context"
+	"time"
 
 	"github-release-notifier/internal/app/subscriptions"
 	quotapb "github-release-notifier/pkg/contracts/quota"
@@ -10,15 +11,24 @@ import (
 	"google.golang.org/grpc"
 )
 
+const defaultRequestTimeout = 2 * time.Second
+
 type Client struct {
-	client quotapb.QuotaServiceClient
+	client  quotapb.QuotaServiceClient
+	timeout time.Duration
 }
 
 func NewClient(conn grpc.ClientConnInterface) *Client {
-	return &Client{client: quotapb.NewQuotaServiceClient(conn)}
+	return &Client{
+		client:  quotapb.NewQuotaServiceClient(conn),
+		timeout: defaultRequestTimeout,
+	}
 }
 
 func (c *Client) ReserveSubscriptionSlot(ctx context.Context, sagaID uuid.UUID, subscriptionID int64, email string) (subscriptions.QuotaReserveResult, error) {
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+
 	response, err := c.client.ReserveSubscriptionSlot(ctx, &quotapb.ReserveSubscriptionSlotRequest{
 		SagaId:         sagaID.String(),
 		SubscriptionId: subscriptionID,
@@ -35,6 +45,9 @@ func (c *Client) ReserveSubscriptionSlot(ctx context.Context, sagaID uuid.UUID, 
 }
 
 func (c *Client) CommitSubscriptionSlot(ctx context.Context, sagaID uuid.UUID, subscriptionID int64) error {
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+
 	_, err := c.client.CommitSubscriptionSlot(ctx, &quotapb.CommitSubscriptionSlotRequest{
 		SagaId:         sagaID.String(),
 		SubscriptionId: subscriptionID,
@@ -43,9 +56,16 @@ func (c *Client) CommitSubscriptionSlot(ctx context.Context, sagaID uuid.UUID, s
 }
 
 func (c *Client) ReleaseSubscriptionSlot(ctx context.Context, sagaID uuid.UUID, subscriptionID int64) error {
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+
 	_, err := c.client.ReleaseSubscriptionSlot(ctx, &quotapb.ReleaseSubscriptionSlotRequest{
 		SagaId:         sagaID.String(),
 		SubscriptionId: subscriptionID,
 	})
 	return err
+}
+
+func (c *Client) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, c.timeout)
 }
